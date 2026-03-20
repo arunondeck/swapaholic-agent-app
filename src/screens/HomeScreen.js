@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { Card } from '../components/Card';
+import { OpsSummary } from '../components/OpsSummary';
 import { ScreenShell } from '../components/ScreenShell';
 import { styles } from '../styles/commonStyles';
 
@@ -16,8 +17,8 @@ const modeBackgrounds = {
   ops: '#dcfce7',
 };
 
-export const HomeScreen = ({ push }) => {
-  const [activeMode, setActiveMode] = useState('swap');
+export const HomeScreen = ({ push, mode, setMode }) => {
+  const activeMode = mode;
 
   return (
     <ScreenShell title="Swapaholic" subtitle="Operations workspace" backgroundColor={modeBackgrounds[activeMode]}>
@@ -25,7 +26,7 @@ export const HomeScreen = ({ push }) => {
         {modeTabs.map((tab) => (
           <TouchableOpacity
             key={tab.key}
-            onPress={() => setActiveMode(tab.key)}
+            onPress={() => setMode(tab.key)}
             style={[styles.tabButton, activeMode === tab.key && styles.tabButtonActive]}
           >
             <Text style={[styles.tabButtonText, activeMode === tab.key && styles.tabButtonTextActive]}>{tab.label}</Text>
@@ -54,9 +55,10 @@ export const HomeScreen = ({ push }) => {
 
       {activeMode === 'ops' ? (
         <>
-          <Text style={styles.sectionTitle}>Ops</Text>
+          <OpsSummary />
+          <Card title="Sales Reports" subtitle="Daily and range-based sales reports" onPress={() => push('opsSalesReports')} />
           <Card title="Products List" subtitle="UI placeholder" onPress={() => push('opsProducts')} />
-          <Card title="Customers List" subtitle="UI placeholder" onPress={() => push('opsCustomers')} />
+          <Card title="Customer List" subtitle="UI placeholder" onPress={() => push('opsCustomers')} />
           <Card title="Subscriptions List" subtitle="UI placeholder" onPress={() => push('opsSubscriptions')} />
         </>
       ) : null}

@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { BackHandler } from 'react-native';
 
 import { HomeScreen } from './src/screens/HomeScreen';
 import { BoothApplicationsScreen } from './src/screens/booth/BoothApplicationsScreen';
@@ -29,15 +30,32 @@ import { SwapPlansScreen } from './src/screens/swap/SwapPlansScreen';
 import { SwapTagsScreen } from './src/screens/swap/SwapTagsScreen';
 
 export default function App() {
-  const [stack, setStack] = useState([{ route: 'home' }]);
+  const [stack, setStack] = useState([{ route: 'home', params: { mode: 'swap' } }]);
 
   const current = stack[stack.length - 1];
   const push = (route, params = {}) => setStack((prev) => [...prev, { route, params }]);
   const pop = () => setStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
+  const updateCurrentParams = (params) =>
+    setStack((prev) =>
+      prev.map((entry, index) => (index === prev.length - 1 ? { ...entry, params: { ...entry.params, ...params } } : entry))
+    );
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (stack.length > 1) {
+        pop();
+        return true;
+      }
+
+      return false;
+    });
+
+    return () => subscription.remove();
+  }, [stack.length]);
 
   const screens = useMemo(
     () => ({
-      home: () => <HomeScreen push={push} />,
+      home: (params) => <HomeScreen push={push} mode={params?.mode || 'swap'} setMode={(mode) => updateCurrentParams({ mode })} />,
       booth: () => <BoothOpsScreen push={push} pop={pop} />,
       boothApplications: () => <BoothApplicationsScreen pop={pop} />,
       boothReview: () => <BoothReviewScreen pop={pop} />,
@@ -81,7 +99,7 @@ export default function App() {
       opsCustomers: () => <OpsCustomersScreen pop={pop} />,
       opsSubscriptions: () => <OpsSubscriptionsScreen pop={pop} />,
     }),
-    [pop, push]
+    [stack.length]
   );
 
   return screens[current.route]?.(current.params);
