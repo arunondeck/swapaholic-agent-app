@@ -1,14 +1,65 @@
-import React from 'react';
-import { Text } from 'react-native';
+import React, { useState } from 'react';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { Card } from '../components/Card';
 import { ScreenShell } from '../components/ScreenShell';
 import { styles } from '../styles/commonStyles';
 
-export const HomeScreen = ({ push }) => (
-  <ScreenShell title="Swapaholic" subtitle="UI prototype • no backend logic yet">
-    <Text style={styles.sectionTitle}>Choose Operation Mode</Text>
-    <Card title="Booth Ops" subtitle="Store sellers, product approvals, and tag printing" onPress={() => push('booth')} />
-    <Card title="Swap Mode" subtitle="Subscriptions, pickup cards, swap products, and points checkout" onPress={() => push('swap')} />
-    <Card title="Ops Mode" subtitle="Internal lists (products, customers, subscriptions)" onPress={() => push('ops')} />
-  </ScreenShell>
-);
+const modeTabs = [
+  { key: 'booth', label: 'Booth' },
+  { key: 'swap', label: 'Swap' },
+  { key: 'ops', label: 'Ops' },
+];
+
+const modeBackgrounds = {
+  booth: '#e0f2fe',
+  swap: '#ffe4e1',
+  ops: '#dcfce7',
+};
+
+export const HomeScreen = ({ push }) => {
+  const [activeMode, setActiveMode] = useState('swap');
+
+  return (
+    <ScreenShell title="Swapaholic" subtitle="Operations workspace" backgroundColor={modeBackgrounds[activeMode]}>
+      <View style={styles.tabsRow}>
+        {modeTabs.map((tab) => (
+          <TouchableOpacity
+            key={tab.key}
+            onPress={() => setActiveMode(tab.key)}
+            style={[styles.tabButton, activeMode === tab.key && styles.tabButtonActive]}
+          >
+            <Text style={[styles.tabButtonText, activeMode === tab.key && styles.tabButtonTextActive]}>{tab.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {activeMode === 'swap' ? (
+        <>
+          <Text style={styles.sectionTitle}>Swap</Text>
+          <Card title="Customer Login" subtitle="Enter email and open customer summary" onPress={() => push('customerPortal')} />
+          <Card title="Scan Pickups" subtitle="Open pickup scan and linked pickup flows" onPress={() => push('pickupCards')} />
+          <Card title="View Subscriptions" subtitle="Browse swap subscription plans" onPress={() => push('swapPlans')} />
+          <Card title="Checkout" subtitle="Scan products and redeem customer points" onPress={() => push('checkout')} />
+        </>
+      ) : null}
+
+      {activeMode === 'booth' ? (
+        <>
+          <Text style={styles.sectionTitle}>Booth</Text>
+          <Card title="Booth Applications" subtitle="View by period, approve/reject booth sellers" onPress={() => push('boothApplications')} />
+          <Card title="Product Review" subtitle="Approve or reject seller products" onPress={() => push('boothReview')} />
+          <Card title="Print Product Tags" subtitle="Generate printable tags for approved products" onPress={() => push('boothTags')} />
+        </>
+      ) : null}
+
+      {activeMode === 'ops' ? (
+        <>
+          <Text style={styles.sectionTitle}>Ops</Text>
+          <Card title="Products List" subtitle="UI placeholder" onPress={() => push('opsProducts')} />
+          <Card title="Customers List" subtitle="UI placeholder" onPress={() => push('opsCustomers')} />
+          <Card title="Subscriptions List" subtitle="UI placeholder" onPress={() => push('opsSubscriptions')} />
+        </>
+      ) : null}
+    </ScreenShell>
+  );
+};

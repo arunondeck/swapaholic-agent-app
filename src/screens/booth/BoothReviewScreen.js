@@ -6,7 +6,7 @@ import { mockBoothProducts } from '../../data/mockData';
 import { styles } from '../../styles/commonStyles';
 
 export const BoothReviewScreen = ({ pop }) => (
-  <ScreenShell title="Seller Product Review" subtitle="Fields: id, name, brand, size, price" onBack={pop}>
+  <ScreenShell title="Seller Product Review" subtitle="Fields: id, name, brand, size, price" onBack={pop} backgroundColor="#e0f2fe">
     {mockBoothProducts.map((product) => (
       <View key={product.id} style={styles.listItem}>
         <Row label="ID" value={product.id} />

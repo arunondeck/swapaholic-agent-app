@@ -1,16 +1,32 @@
 {
   "expo": {
-    "name": "Swapaholic",
-    "slug": "swapaholic-agent-app",
-    "version": "1.0.0",
+    "name": "SwapSquad",
+    "slug": "swapsquad",
+    "version": "0.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./src/images/app-icon.png",
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "assetBundlePatterns": [
       "**/*"
-    ]
+    ],
+    "android": {
+      "package": "com.swapaholic.swapsquad",
+      "adaptiveIcon": {
+        "foregroundImage": "./src/images/app-icon.png",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "web": {
+      "favicon": "./src/images/favicon.ico"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "8c8bda28-8e68-45a5-8bd1-ada75f2d0241"
+      }
+    }
   }
 }

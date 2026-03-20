@@ -4,7 +4,7 @@ import { ScreenShell } from '../../components/ScreenShell';
 import { mockBoothProducts } from '../../data/mockData';
 
 export const BoothTagsScreen = ({ pop }) => (
-  <ScreenShell title="Print Booth Tags" subtitle="Approved products only" onBack={pop}>
+  <ScreenShell title="Print Booth Tags" subtitle="Approved products only" onBack={pop} backgroundColor="#e0f2fe">
     {mockBoothProducts.map((product) => (
       <Card
         key={product.id}
