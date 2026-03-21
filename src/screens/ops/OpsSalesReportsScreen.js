@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TextInput, TouchableOpacity, View } from 'react-native';
+import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { OpsSummary } from '../../components/OpsSummary';
 import { ScreenShell } from '../../components/ScreenShell';
 import { styles } from '../../styles/commonStyles';
