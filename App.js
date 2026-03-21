@@ -2,7 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { BackHandler } from 'react-native';
 
 import { HomeScreen } from './src/screens/HomeScreen';
+import { BoothAllCheckoutsScreen } from './src/screens/booth/BoothAllCheckoutsScreen';
 import { BoothApplicationsScreen } from './src/screens/booth/BoothApplicationsScreen';
+import { BoothCheckoutScreen } from './src/screens/booth/BoothCheckoutScreen';
+import { BoothDetailsScreen } from './src/screens/booth/BoothDetailsScreen';
+import { BoothsScreen } from './src/screens/booth/BoothsScreen';
 import { BoothOpsScreen } from './src/screens/booth/BoothOpsScreen';
 import { BoothReviewScreen } from './src/screens/booth/BoothReviewScreen';
 import { BoothTagsScreen } from './src/screens/booth/BoothTagsScreen';
@@ -57,6 +61,10 @@ export default function App() {
     () => ({
       home: (params) => <HomeScreen push={push} mode={params?.mode || 'swap'} setMode={(mode) => updateCurrentParams({ mode })} />,
       booth: () => <BoothOpsScreen push={push} pop={pop} />,
+      booths: (params) => <BoothsScreen push={push} pop={pop} focusSearch={params?.focusSearch} />,
+      boothDetails: (params) => <BoothDetailsScreen pop={pop} boothId={params?.boothId} />,
+      boothAllCheckouts: () => <BoothAllCheckoutsScreen pop={pop} />,
+      boothCheckout: () => <BoothCheckoutScreen pop={pop} />,
       boothApplications: () => <BoothApplicationsScreen pop={pop} />,
       boothReview: () => <BoothReviewScreen pop={pop} />,
       boothTags: () => <BoothTagsScreen pop={pop} />,
