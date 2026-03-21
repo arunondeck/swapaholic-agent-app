@@ -100,6 +100,37 @@ export const mockBoothProducts = [
  * }} SwapCustomer
  */
 
+/**
+ * @typedef {Object} SwapCustomerOrder
+ * @property {string} id
+ * @property {string} status
+ * @property {string} date
+ * @property {string} itemCount
+ * @property {string} total
+ */
+
+/**
+ * @typedef {Object} SwapCustomerPickup
+ * @property {string} id
+ * @property {string} subscriptionId
+ * @property {string} date
+ * @property {string} address
+ * @property {number} totalItems
+ * @property {number} remainingItems
+ * @property {Array<Record<string, string>>} items
+ */
+
+/**
+ * @typedef {Object} SwapProductReview
+ * @property {string} id
+ * @property {string} productId
+ * @property {string} action
+ * @property {string} status
+ * @property {string} reviewedBy
+ * @property {string} reviewedAt
+ * @property {string} notes
+ */
+
 /** @type {SwapProduct[]} */
 export const mockSwapProducts = [
   {
@@ -286,6 +317,41 @@ export const customerSubscriptions = [
   },
 ];
 
+/** @type {SwapSubscriptionPlan[]} */
+export const swapSubscriptionCatalog = [
+  {
+    id: 'PLAN-LITE',
+    name: 'Lite Swap',
+    validity_c: '1',
+    number_of_items_c: '1',
+    price_c: '899',
+    type_c: 'monthly',
+    status_c: 'active',
+  },
+  {
+    id: 'PLAN-STANDARD',
+    name: 'Standard Swap',
+    validity_c: '1',
+    number_of_items_c: '2',
+    price_c: '1499',
+    type_c: 'monthly',
+    status_c: 'active',
+  },
+  {
+    id: 'PLAN-POWER',
+    name: 'Power Swap',
+    validity_c: '1',
+    number_of_items_c: '4',
+    price_c: '2499',
+    type_c: 'monthly',
+    status_c: 'active',
+  },
+];
+
+/** @type {SwapProductReview[]} */
+export const mockProductReviews = [];
+
+/** @type {SwapCustomerPickup[]} */
 export const customerPickups = [
   {
     id: 'PK-9011',
@@ -307,6 +373,7 @@ export const customerPickups = [
   },
 ];
 
+/** @type {SwapCustomerOrder[]} */
 export const customerOrders = [
   {
     id: 'ORD-8127',
