@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
+import { getCustomerProfile } from '../../api/swapOpsApi';
 import { Card } from '../../components/Card';
 import { ScreenShell } from '../../components/ScreenShell';
-import { getCustomerProfile } from '../../data/mockData';
+import { useLoader } from '../../context/LoaderContext';
 import { styles } from '../../styles/commonStyles';
 
 const overviewStats = (customer) => [
@@ -15,7 +16,41 @@ const overviewStats = (customer) => [
 ];
 
 export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
-  const customer = getCustomerProfile(customerEmail);
+  const [customer, setCustomer] = useState(null);
+  const [error, setError] = useState('');
+  const { withLoader } = useLoader();
+
+  useEffect(() => {
+    let active = true;
+
+    const loadCustomer = async () => {
+      try {
+        setError('');
+        const profile = await withLoader(getCustomerProfile(customerEmail), 'Loading customer...');
+        if (active) {
+          setCustomer(profile);
+        }
+      } catch (loadError) {
+        if (active) {
+          setError(loadError.message || 'Failed to load customer');
+        }
+      }
+    };
+
+    loadCustomer();
+
+    return () => {
+      active = false;
+    };
+  }, [customerEmail, withLoader]);
+
+  if (!customer) {
+    return (
+      <ScreenShell title="Customer" subtitle={error || 'Loading customer details...'} onBack={pop} backgroundColor="#ffe4e1">
+        {error ? <Text>{error}</Text> : null}
+      </ScreenShell>
+    );
+  }
 
   return (
     <ScreenShell title={customer.name} subtitle={customer.email} onBack={pop} backgroundColor="#ffe4e1">

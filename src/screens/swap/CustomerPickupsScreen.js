@@ -1,16 +1,59 @@
-import React from 'react';
-import { TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Text, TouchableOpacity } from 'react-native';
+import { getCustomerPickups, getCustomerProfile, getPickupStatus } from '../../api/swapOpsApi';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
-import { getCustomerProfile, getPickupStatus } from '../../data/mockData';
+import { useLoader } from '../../context/LoaderContext';
 import { styles } from '../../styles/commonStyles';
 
 export const CustomerPickupsScreen = ({ pop, push, customerEmail }) => {
-  const customer = getCustomerProfile(customerEmail);
+  const [customer, setCustomer] = useState(null);
+  const [pickups, setPickups] = useState([]);
+  const [error, setError] = useState('');
+  const { withLoader } = useLoader();
+
+  useEffect(() => {
+    let active = true;
+
+    const loadData = async () => {
+      try {
+        setError('');
+        const [profile, pickupList] = await withLoader(
+          Promise.all([getCustomerProfile(customerEmail), getCustomerPickups(customerEmail)]),
+          'Loading pickups...'
+        );
+
+        if (!active) {
+          return;
+        }
+
+        setCustomer(profile);
+        setPickups(pickupList);
+      } catch (loadError) {
+        if (active) {
+          setError(loadError.message || 'Failed to load pickups');
+        }
+      }
+    };
+
+    loadData();
+
+    return () => {
+      active = false;
+    };
+  }, [customerEmail, withLoader]);
+
+  if (!customer) {
+    return (
+      <ScreenShell title="Pickups" subtitle={error || 'Loading pickup list...'} onBack={pop} backgroundColor="#ffe4e1">
+        <Text>{error || 'Loading...'}</Text>
+      </ScreenShell>
+    );
+  }
 
   return (
     <ScreenShell title="Pickups" subtitle={`${customer.name} pickup list`} onBack={pop} backgroundColor="#ffe4e1">
-      {customer.pickups.map((pickup) => (
+      {pickups.map((pickup) => (
         <TouchableOpacity
           key={pickup.id}
           onPress={() => push('customerPickupDetail', { email: customer.email, pickupId: pickup.id })}

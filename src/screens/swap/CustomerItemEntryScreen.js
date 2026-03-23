@@ -1,38 +1,85 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ScreenShell } from '../../components/ScreenShell';
 import {
-  categoryOptions,
-  colorOptions,
-  conditionOptions,
-  getCustomerPickup,
+  getCustomerPickupDetails,
   getCustomerProfile,
-  getCustomerSubscription,
-} from '../../data/mockData';
+  getCustomerSubscriptionDetails,
+  getItemEntryOptions,
+} from '../../api/swapOpsApi';
+import { ScreenShell } from '../../components/ScreenShell';
+import { useLoader } from '../../context/LoaderContext';
 import { styles } from '../../styles/commonStyles';
 
-const categories = Object.keys(categoryOptions);
-
 export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, sourceId }) => {
-  const customer = getCustomerProfile(customerEmail);
-  const source =
-    sourceType === 'subscription'
-      ? getCustomerSubscription(customerEmail, sourceId)
-      : getCustomerPickup(customerEmail, sourceId);
-
+  const [customer, setCustomer] = useState(null);
+  const [source, setSource] = useState(null);
+  const [itemOptions, setItemOptions] = useState({
+    categoryOptions: {},
+    colorOptions: [],
+    conditionOptions: [],
+  });
   const [photoTaken, setPhotoTaken] = useState(false);
   const [brand, setBrand] = useState('');
-  const [category, setCategory] = useState(categories[0]);
-  const [subcategory, setSubcategory] = useState(categoryOptions[categories[0]][0]);
+  const [category, setCategory] = useState('');
+  const [subcategory, setSubcategory] = useState('');
   const [size, setSize] = useState('');
   const [points, setPoints] = useState('');
   const [material, setMaterial] = useState('');
-  const [color, setColor] = useState(colorOptions[0]);
-  const [condition, setCondition] = useState(conditionOptions[0]);
+  const [color, setColor] = useState('');
+  const [condition, setCondition] = useState('');
   const [damage, setDamage] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
+  const { withLoader } = useLoader();
 
-  const subcategoryOptions = useMemo(() => categoryOptions[category] || [], [category]);
+  useEffect(() => {
+    let active = true;
+
+    const loadData = async () => {
+      try {
+        setError('');
+        const [profile, options, currentSource] = await withLoader(
+          Promise.all([
+            getCustomerProfile(customerEmail),
+            getItemEntryOptions(),
+            sourceType === 'subscription'
+              ? getCustomerSubscriptionDetails(customerEmail, sourceId)
+              : getCustomerPickupDetails(customerEmail, sourceId),
+          ]),
+          'Loading item entry...'
+        );
+
+        if (!active) {
+          return;
+        }
+
+        const categories = Object.keys(options.categoryOptions);
+        const defaultCategory = categories[0] || '';
+        const defaultSubcategory = options.categoryOptions[defaultCategory]?.[0] || '';
+
+        setCustomer(profile);
+        setItemOptions(options);
+        setSource(currentSource);
+        setCategory(defaultCategory);
+        setSubcategory(defaultSubcategory);
+        setColor(options.colorOptions[0] || '');
+        setCondition(options.conditionOptions[0] || '');
+      } catch (loadError) {
+        if (active) {
+          setError(loadError.message || 'Failed to load item entry data');
+        }
+      }
+    };
+
+    loadData();
+
+    return () => {
+      active = false;
+    };
+  }, [customerEmail, sourceId, sourceType, withLoader]);
+
+  const categories = useMemo(() => Object.keys(itemOptions.categoryOptions), [itemOptions.categoryOptions]);
+  const subcategoryOptions = useMemo(() => itemOptions.categoryOptions[category] || [], [category, itemOptions.categoryOptions]);
   const canSubmit =
     photoTaken &&
     brand.trim().length > 0 &&
@@ -46,13 +93,21 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
 
   const onCategoryChange = (nextCategory) => {
     setCategory(nextCategory);
-    setSubcategory(categoryOptions[nextCategory][0]);
+    setSubcategory(itemOptions.categoryOptions[nextCategory]?.[0] || '');
   };
+
+  if (!customer || !source) {
+    return (
+      <ScreenShell title="Add Item" subtitle={error || 'Loading item entry form...'} onBack={pop} backgroundColor="#ffe4e1">
+        <Text>{error || 'Loading...'}</Text>
+      </ScreenShell>
+    );
+  }
 
   return (
     <ScreenShell
       title="Add Item"
-      subtitle={`${customer.name} • ${sourceType === 'subscription' ? source.plan : source.id}`}
+      subtitle={`${customer.name} | ${sourceType === 'subscription' ? source.plan : source.id}`}
       onBack={pop}
       backgroundColor="#ffe4e1"
     >
@@ -108,7 +163,7 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
 
         <Text style={styles.selectLabel}>Color</Text>
         <View style={styles.chipRow}>
-          {colorOptions.map((option) => (
+          {itemOptions.colorOptions.map((option) => (
             <TouchableOpacity
               key={option}
               onPress={() => setColor(option)}
@@ -121,7 +176,7 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
 
         <Text style={styles.selectLabel}>Condition</Text>
         <View style={styles.chipRow}>
-          {conditionOptions.map((option) => (
+          {itemOptions.conditionOptions.map((option) => (
             <TouchableOpacity
               key={option}
               onPress={() => setCondition(option)}
@@ -152,10 +207,10 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
       {submitted ? (
         <View style={styles.listItem}>
           <Text style={styles.sectionTitle}>Entered Item</Text>
-          <Text style={styles.itemMeta}>{brand} • {category} • {subcategory}</Text>
-          <Text style={styles.itemMeta}>Size: {size} • Points: {points}</Text>
-          <Text style={styles.itemMeta}>Material: {material} • Color: {color}</Text>
-          <Text style={styles.itemMeta}>Condition: {condition} • Damage: {damage || 'None'}</Text>
+          <Text style={styles.itemMeta}>{brand} | {category} | {subcategory}</Text>
+          <Text style={styles.itemMeta}>Size: {size} | Points: {points}</Text>
+          <Text style={styles.itemMeta}>Material: {material} | Color: {color}</Text>
+          <Text style={styles.itemMeta}>Condition: {condition} | Damage: {damage || 'None'}</Text>
         </View>
       ) : null}
     </ScreenShell>

@@ -1,13 +1,22 @@
 import {
+  categoryOptions,
+  colorOptions,
+  conditionOptions,
   customerOrders,
   customerPickups,
+  customerCheckoutCart,
   customerSubscriptions,
   customerSuccessData,
-  getCustomerPickup,
-  getCustomerProfile,
-  getCustomerSubscription,
+  customerSwappedInItems,
+  formatRemainingItems as formatMockRemainingItems,
+  getCustomerPickup as getMockCustomerPickup,
+  getCustomerProfile as getMockCustomerProfile,
+  getCustomerSubscription as getMockCustomerSubscription,
+  getPickupStatus as getMockPickupStatus,
+  mockBoothProducts,
   mockProductReviews,
   mockSwapProducts,
+  plans,
   swapSubscriptionCatalog,
 } from '../data/mockData';
 
@@ -70,10 +79,134 @@ const delay = (ms = 150) => new Promise((resolve) => setTimeout(resolve, ms));
 const SWAP_API_URL = (process.env.EXPO_PUBLIC_SWAP_API_URL || '').replace(/\/$/, '');
 const SWAP_API_VERSION = process.env.EXPO_PUBLIC_SWAP_API_VERSION || 'v3';
 const SWAP_USE_MOCK = (process.env.EXPO_PUBLIC_SWAP_USE_MOCK || 'true').toLowerCase() === 'true';
+const EMPTY_ARRAY = [];
+
+const getResponseData = (response) => response?.success?.data || {};
+
+const toNumber = (value, fallback = 0) => {
+  const parsed = Number.parseInt(String(value ?? fallback), 10);
+  return Number.isNaN(parsed) ? fallback : parsed;
+};
+
+const getCustomerName = (customer = {}) => {
+  if (customer.name) {
+    return customer.name;
+  }
+
+  return [customer.first_name_c, customer.last_name_c].filter(Boolean).join(' ') || 'Customer';
+};
+
+const formatPlanLabel = (plan) => {
+  if (!plan) {
+    return '';
+  }
+
+  const name = plan.name || '';
+  const count = toNumber(plan.number_of_items_c, 0);
+
+  if (!count) {
+    return name;
+  }
+
+  return `${name} - ${count} pickup${count === 1 ? '' : 's'} / month`;
+};
+
+const mapApiCustomerToProfile = (customer, email = '') => ({
+  id: customer?.id || '',
+  name: getCustomerName(customer),
+  email: customer?.email_c || email,
+  points: `${customer?.total_available_points_c || '0'} pts`,
+  activePackage:
+    customer?.shop_subscribe?.subscription?.name ||
+    customer?.subscribe?.subscription?.name ||
+    customer?.event_subscribe?.subscription?.name ||
+    'No active package',
+  pointsExpiryDate:
+    customer?.shop_subscribe?.expiry_date_c ||
+    customer?.subscribe?.expiry_date_c ||
+    customer?.event_subscribe?.expiry_date_c ||
+    'NA',
+  itemsSwappedIn: toNumber(customer?.total_items_surrendered_c),
+  itemsSwappedOut: toNumber(customer?.total_items_swapped_c),
+  ordersMade: 0,
+  customerSubscribe: {
+    subscribe: customer?.subscribe || null,
+    shop_subscribe: customer?.shop_subscribe || null,
+    event_subscribe: customer?.event_subscribe || null,
+  },
+  subscriptions: EMPTY_ARRAY,
+  pickups: EMPTY_ARRAY,
+  orders: EMPTY_ARRAY,
+  swappedInItems: EMPTY_ARRAY,
+  checkoutCart: EMPTY_ARRAY,
+});
+
+const mapApiSubscribeToSubscription = (subscription) => ({
+  id: subscription.id,
+  plan: subscription.subscription?.name || subscription.name || 'Subscription',
+  status: subscription.status_c || 'Unknown',
+  startDate: subscription.date_entered || 'NA',
+  renewalDate: subscription.expiry_date_c || 'NA',
+  itemsRemaining: toNumber(subscription.number_of_items_c),
+  items: EMPTY_ARRAY,
+});
+
+const mapMockCustomerToDetailResponse = (customer) => ({
+  status: true,
+  success: {
+    code: 'CUS-001',
+    message: 'Customer fetched',
+    data: {
+      customer: {
+        ...customerSuccessData.customer,
+        id: customer.id,
+        name: customer.name,
+        email_c: customer.email,
+        total_items_surrendered_c: String(customer.itemsSwappedIn || 0),
+        total_items_swapped_c: String(customer.itemsSwappedOut || 0),
+        total_available_points_c: customer.points?.split(' ')[0] || '0',
+        subscribes_list: (customer.subscriptions || []).map((subscription) => ({
+          id: subscription.id,
+          name: subscription.plan,
+          subscribe_type_c: 'shop',
+          status_c: subscription.status.toLowerCase(),
+          number_of_items_c: String(subscription.items?.length || 0),
+          number_of_accepted_items_c: String(subscription.items?.length || 0),
+          number_of_rejected_items_c: '0',
+          items_swapped_c: '0',
+          subscription: {
+            id: subscription.id,
+            name: subscription.plan,
+            validity_c: '1',
+            number_of_items_c: String(subscription.items?.length || 0),
+            price_c: '0',
+            type_c: 'items',
+            status_c: 'active',
+          },
+        })),
+        wallets: {
+          store: 0,
+          event: 0,
+          marketplace: 0,
+          shop: toNumber(customer.itemsSwappedIn),
+        },
+      },
+      total_count: 1,
+      result_count: 1,
+      next_offset: -1,
+      total_pages: 1,
+      current_page: 1,
+      query: '',
+      state_hash: null,
+    },
+  },
+  error: null,
+  status_code: 200,
+});
 
 /**
  * Maps local customer profile data to the login response payload shape.
- * @param {ReturnType<typeof getCustomerProfile>} customer
+ * @param {ReturnType<typeof getMockCustomerProfile>} customer
  * @returns {SwapLoginResponse}
  */
 const toLoginPayload = (customer) => ({
@@ -192,53 +325,7 @@ const toMockSubscriptionListResponse = (tenancy) => ({
  * @param {string} [customerId=customerSuccessData.customer.id]
  * @returns {SwapApiEnvelope}
  */
-const toMockCustomerDetailResponse = (customerId = customerSuccessData.customer.id) => ({
-  status: true,
-  success: {
-    code: 'CUS-001',
-    message: 'Customer fetched',
-    data: {
-      customer: {
-        ...customerSuccessData.customer,
-        id: customerId,
-        subscribes_list: customerSubscriptions.map((subscription) => ({
-          id: subscription.id,
-          name: subscription.plan,
-          subscribe_type_c: 'shop',
-          status_c: subscription.status.toLowerCase(),
-          number_of_items_c: String(subscription.items?.length || 0),
-          number_of_accepted_items_c: String(subscription.items?.length || 0),
-          number_of_rejected_items_c: '0',
-          items_swapped_c: '0',
-          subscription: {
-            id: subscription.id,
-            name: subscription.plan,
-            validity_c: '1',
-            number_of_items_c: String(subscription.items?.length || 0),
-            price_c: '0',
-            type_c: 'items',
-            status_c: 'active',
-          },
-        })),
-        wallets: {
-          store: 0,
-          event: 0,
-          marketplace: 0,
-          shop: Number.parseInt(customerSuccessData.customer.total_items_surrendered_c || '0', 10),
-        },
-      },
-      total_count: 1,
-      result_count: 1,
-      next_offset: -1,
-      total_pages: 1,
-      current_page: 1,
-      query: '',
-      state_hash: null,
-    },
-  },
-  error: null,
-  status_code: 200,
-});
+const toMockCustomerDetailResponse = (email = '') => mapMockCustomerToDetailResponse(getMockCustomerProfile(email));
 
 /**
  * Login as customer using email.
@@ -251,7 +338,7 @@ const toMockCustomerDetailResponse = (customerId = customerSuccessData.customer.
 export const loginAsCustomer = async (email) => {
   if (SWAP_USE_MOCK) {
     await delay();
-    const customer = getCustomerProfile(email);
+    const customer = getMockCustomerProfile(email);
     return toLoginPayload(customer);
   }
 
@@ -264,8 +351,12 @@ export const loginAsCustomer = async (email) => {
  * @returns {Promise<SwapOrder[]>}
  */
 export const getCustomerOrders = async (email) => {
-  await delay();
-  return getCustomerProfile(email).orders || customerOrders;
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return getMockCustomerProfile(email).orders || customerOrders;
+  }
+
+  return EMPTY_ARRAY;
 };
 
 /**
@@ -274,8 +365,20 @@ export const getCustomerOrders = async (email) => {
  * @returns {Promise<SwapSubscription[]>}
  */
 export const getCustomerSubscriptions = async (email) => {
-  await delay();
-  return getCustomerProfile(email).subscriptions || customerSubscriptions;
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return getMockCustomerProfile(email).subscriptions || customerSubscriptions;
+  }
+
+  const loginResponse = await loginAsCustomer(email);
+  const customerId = loginResponse?.customer?.id;
+
+  if (!customerId) {
+    return EMPTY_ARRAY;
+  }
+
+  const response = await getCustomerSubscribesList({ customerId });
+  return (getResponseData(response).subscribes || []).map(mapApiSubscribeToSubscription);
 };
 
 /**
@@ -284,8 +387,12 @@ export const getCustomerSubscriptions = async (email) => {
  * @returns {Promise<SwapPickup[]>}
  */
 export const getCustomerPickups = async (email) => {
-  await delay();
-  return getCustomerProfile(email).pickups || customerPickups;
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return getMockCustomerProfile(email).pickups || customerPickups;
+  }
+
+  return EMPTY_ARRAY;
 };
 
 /**
@@ -295,8 +402,13 @@ export const getCustomerPickups = async (email) => {
  * @returns {Promise<SwapSubscription>}
  */
 export const getCustomerSubscriptionDetails = async (email, subscriptionId) => {
-  await delay();
-  return getCustomerSubscription(email, subscriptionId);
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return getMockCustomerSubscription(email, subscriptionId);
+  }
+
+  const subscriptions = await getCustomerSubscriptions(email);
+  return subscriptions.find((subscription) => subscription.id === subscriptionId) || subscriptions[0] || null;
 };
 
 /**
@@ -306,8 +418,13 @@ export const getCustomerSubscriptionDetails = async (email, subscriptionId) => {
  * @returns {Promise<SwapPickup>}
  */
 export const getCustomerPickupDetails = async (email, pickupId) => {
-  await delay();
-  return getCustomerPickup(email, pickupId);
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return getMockCustomerPickup(email, pickupId);
+  }
+
+  const pickups = await getCustomerPickups(email);
+  return pickups.find((pickup) => pickup.id === pickupId) || pickups[0] || null;
 };
 
 /**
@@ -377,7 +494,7 @@ export const getCustomerSubscribesList = async ({
         code: 'SUBSCRIBE-001',
         message: 'Subscribes fetched',
         data: {
-          subscribes: toMockCustomerDetailResponse(customerId).success.data.customer.subscribes_list,
+          subscribes: toMockCustomerDetailResponse().success.data.customer.subscribes_list,
         },
       },
       error: null,
@@ -520,6 +637,76 @@ export const addItemToCustomerPickup = async ({ pickupId, thumbnailFile }) => {
 
   return postFormData('users/customer-items/init', formData, false);
 };
+
+export const getCustomerProfile = async (email) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return getMockCustomerProfile(email);
+  }
+
+  const loginResponse = await loginAsCustomer(email);
+  return mapApiCustomerToProfile(loginResponse?.customer, email);
+};
+
+export const getCustomerSwappedInItems = async (email) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return getMockCustomerProfile(email).swappedInItems || customerSwappedInItems;
+  }
+
+  const pickups = await getCustomerPickups(email);
+  return pickups.flatMap((pickup) => pickup.items || []);
+};
+
+export const getCustomerCheckoutCart = async (email) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return getMockCustomerProfile(email).checkoutCart || customerCheckoutCart;
+  }
+
+  return EMPTY_ARRAY;
+};
+
+export const getSwapPlans = async () => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return plans;
+  }
+
+  const response = await getSubscriptionsList('SWAP.SUB.TYPE.ITEMS.STORE');
+  return (getResponseData(response).subscriptions || []).map(formatPlanLabel);
+};
+
+export const getItemEntryOptions = async () => {
+  await delay(0);
+  return {
+    categoryOptions,
+    colorOptions,
+    conditionOptions,
+  };
+};
+
+export const getInspectionProducts = async () => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return mockSwapProducts;
+  }
+
+  const response = await getCustomerUnreviewedItems();
+  return getResponseData(response).items || EMPTY_ARRAY;
+};
+
+export const getBoothProducts = async () => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return mockBoothProducts;
+  }
+
+  return EMPTY_ARRAY;
+};
+
+export const getPickupStatus = (pickup) => getMockPickupStatus(pickup);
+export const formatRemainingItems = (count) => formatMockRemainingItems(count);
 
 /**
  * API runtime configuration for diagnostics.

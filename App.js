@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BackHandler } from 'react-native';
+import { LoaderProvider } from './src/context/LoaderContext';
 
 import { HomeScreen } from './src/screens/HomeScreen';
 import { BoothAllCheckoutsScreen } from './src/screens/booth/BoothAllCheckoutsScreen';
@@ -110,5 +111,5 @@ export default function App() {
     [stack.length]
   );
 
-  return screens[current.route]?.(current.params);
+  return <LoaderProvider>{screens[current.route]?.(current.params)}</LoaderProvider>;
 }
