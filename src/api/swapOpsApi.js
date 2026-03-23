@@ -884,6 +884,39 @@ export const getCustomerCheckoutCart = async (email) => {
   return EMPTY_ARRAY;
 };
 
+/**
+ * Finds a product by scanned QR payload.
+ * @param {string} email
+ * @param {string} scanText
+ * @returns {Promise<{ sku: string, name: string, size: string, points: string } | null>}
+ */
+export const findProductByQrCode = async (email, scanText) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const customerCart = getMockCustomerProfile(email).checkoutCart || customerCheckoutCart;
+    const query = String(scanText || '')
+      .trim()
+      .toLowerCase();
+
+    if (!query) {
+      return null;
+    }
+
+    return (
+      customerCart.find(
+        (item) =>
+          item.sku?.toLowerCase() === query ||
+          item.name?.toLowerCase() === query ||
+          `${item.sku} ${item.name}`.toLowerCase().includes(query)
+      ) || null
+    );
+  }
+
+  // Stub for live API integration.
+  // TODO: Replace with endpoint when product lookup API is available.
+  return null;
+};
+
 export const getSwapPlans = async () => {
   if (SWAP_USE_MOCK) {
     await delay();
