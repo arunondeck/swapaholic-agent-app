@@ -117,7 +117,7 @@ const mapApiCustomerToProfile = (customer, email = '', wallets = {}) => ({
   id: customer?.id || '',
   name: getCustomerName(customer),
   email: customer?.email_c || email,
-  points: `${wallets?.shop ?? customer?.total_available_points_c || '0'} pts`,
+  points: `${wallets?.shop ?? customer?.total_available_points_c ?? '0'} pts`,
   activePackage:
     customer?.shop_subscribe?.subscription?.name ||
     customer?.subscribe?.subscription?.name ||
