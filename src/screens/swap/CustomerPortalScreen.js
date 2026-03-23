@@ -3,10 +3,13 @@ import { Text, TextInput, TouchableOpacity } from 'react-native';
 import { authenticateCustomer } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
+import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 
 export const CustomerPortalScreen = ({ push, pop }) => {
-  const [email, setEmail] = useState('ysnteo@gmail.com');
+  const activeCustomer = useSwapStore((state) => state.activeCustomer);
+  const setActiveCustomerSession = useSwapStore((state) => state.setActiveCustomerSession);
+  const [email, setEmail] = useState(activeCustomer?.email || 'ysnteo@gmail.com');
   const [error, setError] = useState('');
   const { withLoader } = useLoader();
   const isEnabled = email.trim().length > 0;
@@ -18,7 +21,8 @@ export const CustomerPortalScreen = ({ push, pop }) => {
 
     try {
       setError('');
-      await withLoader(authenticateCustomer(email), 'Logging in customer...');
+      const session = await withLoader(authenticateCustomer(email), 'Logging in customer...');
+      setActiveCustomerSession(session);
       push('customerOverview', { email });
     } catch (loginError) {
       setError(loginError.message || 'Customer login failed');
@@ -46,6 +50,7 @@ export const CustomerPortalScreen = ({ push, pop }) => {
       >
         <Text style={styles.primaryButtonText}>Enter</Text>
       </TouchableOpacity>
+      {activeCustomer?.email ? <Text style={styles.helperText}>Active customer: {activeCustomer.email}</Text> : null}
       {error ? <Text style={styles.helperText}>{error}</Text> : null}
     </ScreenShell>
   );
