@@ -1,18 +1,28 @@
 import React, { useState } from 'react';
 import { Text, TextInput, TouchableOpacity } from 'react-native';
+import { authenticateCustomer } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
+import { useLoader } from '../../context/LoaderContext';
 import { styles } from '../../styles/commonStyles';
 
 export const CustomerPortalScreen = ({ push, pop }) => {
-  const [email, setEmail] = useState('temp@swapsquad.app');
+  const [email, setEmail] = useState('ysnteo@gmail.com');
+  const [error, setError] = useState('');
+  const { withLoader } = useLoader();
   const isEnabled = email.trim().length > 0;
 
-  const openCustomer = () => {
+  const openCustomer = async () => {
     if (!isEnabled) {
       return;
     }
 
-    push('customerOverview', { email });
+    try {
+      setError('');
+      await withLoader(authenticateCustomer(email), 'Logging in customer...');
+      push('customerOverview', { email });
+    } catch (loginError) {
+      setError(loginError.message || 'Customer login failed');
+    }
   };
 
   return (
@@ -36,6 +46,7 @@ export const CustomerPortalScreen = ({ push, pop }) => {
       >
         <Text style={styles.primaryButtonText}>Enter</Text>
       </TouchableOpacity>
+      {error ? <Text style={styles.helperText}>{error}</Text> : null}
     </ScreenShell>
   );
 };

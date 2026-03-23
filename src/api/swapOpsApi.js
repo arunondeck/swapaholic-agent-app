@@ -76,10 +76,12 @@ import {
  */
 const delay = (ms = 150) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const SWAP_API_URL = (process.env.EXPO_PUBLIC_SWAP_API_URL || '').replace(/\/$/, '');
+const SWAP_API_URL = (process.env.EXPO_PUBLIC_SWAP_API_URL || 'https://api.swapaholic.com/api').replace(/\/$/, '');
+const SWAP_WALLET_API_URL = (process.env.EXPO_PUBLIC_SWAP_WALLET_API_URL || 'https://walletapi.swapaholic.com/api').replace(/\/$/, '');
 const SWAP_API_VERSION = process.env.EXPO_PUBLIC_SWAP_API_VERSION || 'v3';
 const SWAP_USE_MOCK = (process.env.EXPO_PUBLIC_SWAP_USE_MOCK || 'true').toLowerCase() === 'true';
 const EMPTY_ARRAY = [];
+const customerSessionCache = new Map();
 
 const getResponseData = (response) => response?.success?.data || {};
 
@@ -111,11 +113,11 @@ const formatPlanLabel = (plan) => {
   return `${name} - ${count} pickup${count === 1 ? '' : 's'} / month`;
 };
 
-const mapApiCustomerToProfile = (customer, email = '') => ({
+const mapApiCustomerToProfile = (customer, email = '', wallets = {}) => ({
   id: customer?.id || '',
   name: getCustomerName(customer),
   email: customer?.email_c || email,
-  points: `${customer?.total_available_points_c || '0'} pts`,
+  points: `${wallets?.shop ?? customer?.total_available_points_c || '0'} pts`,
   activePackage:
     customer?.shop_subscribe?.subscription?.name ||
     customer?.subscribe?.subscription?.name ||
@@ -140,6 +142,8 @@ const mapApiCustomerToProfile = (customer, email = '') => ({
   swappedInItems: EMPTY_ARRAY,
   checkoutCart: EMPTY_ARRAY,
 });
+
+const mapWalletResponseToWallets = (response) => response?.wallets || {};
 
 const mapApiSubscribeToSubscription = (subscription) => ({
   id: subscription.id,
@@ -247,6 +251,8 @@ const buildUrl = (path, withVersion = true) => {
   return withVersion ? `${SWAP_API_URL}/${SWAP_API_VERSION}/${normalizedPath}` : `${SWAP_API_URL}/${normalizedPath}`;
 };
 
+const buildWalletUrl = (path) => `${SWAP_WALLET_API_URL}/${path.replace(/^\//, '')}`;
+
 /**
  * Sends a POST request with JSON payload.
  * @param {string} path
@@ -261,6 +267,20 @@ const postJson = async (path, body, withVersion = true) => {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Swap API request failed (${response.status}): ${errorText}`);
+  }
+
+  return response.json();
+};
+
+const getJson = async (url, headers = {}) => {
+  const response = await fetch(url, {
+    method: 'GET',
+    headers,
   });
 
   if (!response.ok) {
@@ -345,6 +365,75 @@ export const loginAsCustomer = async (email) => {
   return postJson('yHncKdVLF2/customers/mime/login/email/3BCB2', { email_c: email });
 };
 
+export const getWalletBalances = async (token, email = '') => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const customer = getMockCustomerProfile(email || customerSuccessData.customer.email_c);
+    return {
+      status: true,
+      wallets: {
+        store: 0,
+        event: 0,
+        marketplace: 0,
+        shop: toNumber(customer.points?.split(' ')[0]),
+      },
+      customer: {
+        name: customer.name,
+        first_name: customer.name.split(' ')[0] || '',
+        last_name: customer.name.split(' ').slice(1).join(' '),
+        id: customer.id,
+      },
+      status_code: 200,
+    };
+  }
+
+  return getJson(buildWalletUrl('v1/wallet/get/balances'), token ? { Authorization: `Bearer ${token}` } : {});
+};
+
+const createCustomerSession = async (email) => {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (customerSessionCache.has(normalizedEmail)) {
+    return customerSessionCache.get(normalizedEmail);
+  }
+
+  const sessionPromise = (async () => {
+    const loginResponse = await loginAsCustomer(normalizedEmail);
+    const walletResponse = await getWalletBalances(loginResponse?.token, normalizedEmail);
+    const profile = mapApiCustomerToProfile(loginResponse?.customer, normalizedEmail, mapWalletResponseToWallets(walletResponse));
+
+    return {
+      email: normalizedEmail,
+      loginResponse,
+      profile,
+      walletResponse,
+    };
+  })();
+
+  customerSessionCache.set(normalizedEmail, sessionPromise);
+
+  try {
+    return await sessionPromise;
+  } catch (error) {
+    customerSessionCache.delete(normalizedEmail);
+    throw error;
+  }
+};
+
+export const authenticateCustomer = async (email) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return {
+      email,
+      loginResponse: toLoginPayload(getMockCustomerProfile(email)),
+      profile: getMockCustomerProfile(email),
+      walletResponse: await getWalletBalances('', email),
+    };
+  }
+
+  return createCustomerSession(email);
+};
+
 /**
  * Get customer orders.
  * @param {string} email
@@ -370,7 +459,8 @@ export const getCustomerSubscriptions = async (email) => {
     return getMockCustomerProfile(email).subscriptions || customerSubscriptions;
   }
 
-  const loginResponse = await loginAsCustomer(email);
+  const session = await createCustomerSession(email);
+  const loginResponse = session?.loginResponse;
   const customerId = loginResponse?.customer?.id;
 
   if (!customerId) {
@@ -644,8 +734,8 @@ export const getCustomerProfile = async (email) => {
     return getMockCustomerProfile(email);
   }
 
-  const loginResponse = await loginAsCustomer(email);
-  return mapApiCustomerToProfile(loginResponse?.customer, email);
+  const session = await createCustomerSession(email);
+  return session.profile;
 };
 
 export const getCustomerSwappedInItems = async (email) => {
@@ -713,6 +803,7 @@ export const formatRemainingItems = (count) => formatMockRemainingItems(count);
  */
 export const swapApiConfig = {
   url: SWAP_API_URL,
+  walletUrl: SWAP_WALLET_API_URL,
   version: SWAP_API_VERSION,
   useMock: SWAP_USE_MOCK,
 };
