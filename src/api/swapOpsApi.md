@@ -35,6 +35,10 @@ When `EXPO_PUBLIC_SWAP_USE_MOCK=true`, all supported API methods return local mo
   - `SWAP.SUB.TYPE.POINTS.SHOP`
   - `SWAP.SUB.TYPE.CONVERSIONS.SHOP`
 
+### 2.1) Get all subscriptions
+- Function: `getAllSubscriptions()`
+- Behavior: calls all 3 tenancy variants above and returns a merged unique list by `id`.
+
 ### 3) Get customer subscribes list
 - Function: `getCustomerSubscribesList({ customerId, subscribeType, ignoreNonPickupSubscribe })`
 - Endpoint: `POST /{api_ver}/subscribes/list`
@@ -45,6 +49,40 @@ When `EXPO_PUBLIC_SWAP_USE_MOCK=true`, all supported API methods return local mo
   "customer_id_c": "<customer-id-from-login>",
   "subscribe_type_c": "shop",
   "ignore_non_pickup_subscribe": false
+}
+```
+
+### 3.1) Get active customer subscriptions
+- Function: `getActiveCustomerSubscriptions(email)`
+- Behavior: authenticates by email, calls customer subscribes list, and returns only active subscriptions.
+
+### 3.2) Get all customer pickups
+- Function: `getAllCustomerPickups(email)`
+- Endpoint: `POST /{api_ver}/pickups/list`
+- Body:
+```json
+{
+  "tenancy": "SWAP.PICKUPS.GET.CUST_ID",
+  "customer_id_c": "<customer-id-from-login>",
+  "max_results": 100,
+  "offset": 0
+}
+```
+
+### 3.3) Get active package details
+- Function: `getActivePackageDetails(email)`
+- Behavior: fetches active customer subscriptions and resolves full details/items for the first active package via subscription details API.
+
+### 3.4) Get customer subscription details
+- Function: `getCustomerSubscriptionDetails(email, subscriptionId)`
+- Endpoint: `POST /{api_ver}/subscribes/get`
+- Body:
+```json
+{
+  "tenancy": "SWAP.SUBSCRIBE.GET.BY_ID",
+  "customer_id_c": "<customer-id-from-login>",
+  "subscribe_id_c": "<subscription-id>",
+  "fetch_items": true
 }
 ```
 

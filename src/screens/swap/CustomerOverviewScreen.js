@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { getCustomerProfile } from '../../api/swapOpsApi';
+import { getActivePackageDetails, getCustomerProfile } from '../../api/swapOpsApi';
 import { Card } from '../../components/Card';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
+import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 
 const overviewStats = (customer) => [
@@ -16,7 +17,10 @@ const overviewStats = (customer) => [
 ];
 
 export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
+  const activeCustomer = useSwapStore((state) => state.activeCustomer);
+  const activeEmail = customerEmail || activeCustomer?.email || '';
   const [customer, setCustomer] = useState(null);
+  const [activeSubscription, setActiveSubscription] = useState(null);
   const [error, setError] = useState('');
   const { withLoader } = useLoader();
 
@@ -26,9 +30,16 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
     const loadCustomer = async () => {
       try {
         setError('');
-        const profile = await withLoader(getCustomerProfile(customerEmail), 'Loading customer...');
+        const [profile, activePackageDetails] =
+          activeCustomer?.details && activeCustomer?.email === activeEmail
+            ? [activeCustomer.details, await getActivePackageDetails(activeEmail)]
+            : await withLoader(
+                Promise.all([getCustomerProfile(activeEmail), getActivePackageDetails(activeEmail)]),
+                'Loading customer...'
+              );
         if (active) {
           setCustomer(profile);
+          setActiveSubscription(activePackageDetails || null);
         }
       } catch (loadError) {
         if (active) {
@@ -42,7 +53,7 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
     return () => {
       active = false;
     };
-  }, [customerEmail, withLoader]);
+  }, [activeCustomer?.details, activeCustomer?.email, activeEmail, withLoader]);
 
   if (!customer) {
     return (
@@ -67,6 +78,23 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
         title="Subscriptions"
         subtitle={`List all subscriptions bought by ${customer.name}`}
         onPress={() => push('customerSubscriptions', { email: customer.email })}
+      />
+      <Card
+        title="Active Package"
+        subtitle={
+          activeSubscription
+            ? `${activeSubscription.plan} • ${activeSubscription.status} • ${activeSubscription.items?.length || 0} items • Tap for full details`
+            : 'No active package found'
+        }
+        onPress={
+          activeSubscription
+            ? () =>
+                push('customerSubscriptionDetail', {
+                  email: customer.email,
+                  subscriptionId: activeSubscription.id,
+                })
+            : undefined
+        }
       />
       <Card title="Pickups" subtitle="List all pickups by customer" onPress={() => push('customerPickups', { email: customer.email })} />
       <Card title="Orders" subtitle="List all orders by customer" onPress={() => push('customerOrders', { email: customer.email })} />

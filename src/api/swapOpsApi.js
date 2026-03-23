@@ -155,6 +155,25 @@ const mapApiSubscribeToSubscription = (subscription) => ({
   items: EMPTY_ARRAY,
 });
 
+const mapApiSubscriptionItem = (item) => ({
+  id: item?.id || item?.item_id_c || '',
+  image: item?.thumbnail_c || item?.image || 'https://via.placeholder.com/64x64.png?text=Item',
+  brand: item?.brand_c || item?.brand || 'NA',
+  category: item?.category_c || item?.category || 'NA',
+  subcategory: item?.subcategory_c || item?.subcategory || 'NA',
+  size: item?.size_c || item?.size || 'NA',
+});
+
+const mapApiPickupToPickup = (pickup) => ({
+  id: pickup?.id || pickup?.pickup_id_c || '',
+  subscriptionId: pickup?.subscribe_id_c || pickup?.subscription_id_c || '',
+  date: pickup?.date_entered || pickup?.pickup_date_c || 'NA',
+  address: pickup?.pickup_address_c || pickup?.address_c || 'NA',
+  totalItems: toNumber(pickup?.number_of_items_c),
+  remainingItems: toNumber(pickup?.remaining_items_c, toNumber(pickup?.number_of_items_c)),
+  items: pickup?.items || EMPTY_ARRAY,
+});
+
 const mapMockCustomerToDetailResponse = (customer) => ({
   status: true,
   success: {
@@ -471,6 +490,32 @@ export const getCustomerSubscriptions = async (email) => {
   return (getResponseData(response).subscribes || []).map(mapApiSubscribeToSubscription);
 };
 
+export const getActiveCustomerSubscriptions = async (email) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return (getMockCustomerProfile(email).subscriptions || customerSubscriptions).filter(
+      (subscription) => String(subscription.status || '').toLowerCase() === 'active'
+    );
+  }
+
+  const session = await createCustomerSession(email);
+  const customerId = session?.loginResponse?.customer?.id;
+
+  if (!customerId) {
+    return EMPTY_ARRAY;
+  }
+
+  const response = await getCustomerSubscribesList({
+    customerId,
+    subscribeType: 'shop',
+    ignoreNonPickupSubscribe: true,
+  });
+
+  return (getResponseData(response).subscribes || [])
+    .filter((subscription) => String(subscription?.status_c || '').toLowerCase() === 'active')
+    .map(mapApiSubscribeToSubscription);
+};
+
 /**
  * Get customer pickups.
  * @param {string} email
@@ -482,7 +527,30 @@ export const getCustomerPickups = async (email) => {
     return getMockCustomerProfile(email).pickups || customerPickups;
   }
 
-  return EMPTY_ARRAY;
+  return getAllCustomerPickups(email);
+};
+
+export const getAllCustomerPickups = async (email) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return getMockCustomerProfile(email).pickups || customerPickups;
+  }
+
+  const session = await createCustomerSession(email);
+  const customerId = session?.loginResponse?.customer?.id;
+
+  if (!customerId) {
+    return EMPTY_ARRAY;
+  }
+
+  const response = await postJson('pickups/list', {
+    tenancy: 'SWAP.PICKUPS.GET.CUST_ID',
+    customer_id_c: customerId,
+    max_results: 100,
+    offset: 0,
+  });
+
+  return (getResponseData(response).pickups || []).map(mapApiPickupToPickup);
 };
 
 /**
@@ -497,8 +565,52 @@ export const getCustomerSubscriptionDetails = async (email, subscriptionId) => {
     return getMockCustomerSubscription(email, subscriptionId);
   }
 
-  const subscriptions = await getCustomerSubscriptions(email);
-  return subscriptions.find((subscription) => subscription.id === subscriptionId) || subscriptions[0] || null;
+  const session = await createCustomerSession(email);
+  const customerId = session?.loginResponse?.customer?.id;
+
+  if (!customerId) {
+    return null;
+  }
+
+  const response = await postJson('subscribes/get', {
+    tenancy: 'SWAP.SUBSCRIBE.GET.BY_ID',
+    customer_id_c: customerId,
+    subscribe_id_c: subscriptionId,
+    fetch_items: true,
+  });
+
+  const subscription = getResponseData(response).subscribe || getResponseData(response).subscription || null;
+
+  if (!subscription) {
+    return null;
+  }
+
+  return {
+    ...mapApiSubscribeToSubscription(subscription),
+    items: (subscription?.items || []).map(mapApiSubscriptionItem),
+  };
+};
+
+export const getActivePackageDetails = async (email) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const activeSubscription = (getMockCustomerProfile(email).subscriptions || customerSubscriptions).find(
+      (subscription) => String(subscription.status || '').toLowerCase() === 'active'
+    );
+    if (!activeSubscription) {
+      return null;
+    }
+    return getMockCustomerSubscription(email, activeSubscription.id);
+  }
+
+  const activeSubscriptions = await getActiveCustomerSubscriptions(email);
+  const activeSubscription = activeSubscriptions[0];
+
+  if (!activeSubscription?.id) {
+    return null;
+  }
+
+  return getCustomerSubscriptionDetails(email, activeSubscription.id);
 };
 
 /**
@@ -563,6 +675,21 @@ export const getSubscriptionsList = async (tenancy = 'SWAP.SUB.TYPE.ITEMS.STORE'
   }
 
   return postJson('subscriptions/list', { tenancy });
+};
+
+export const getAllSubscriptions = async () => {
+  const tenancies = ['SWAP.SUB.TYPE.ITEMS.STORE', 'SWAP.SUB.TYPE.POINTS.SHOP', 'SWAP.SUB.TYPE.CONVERSIONS.SHOP'];
+  const responses = await Promise.all(tenancies.map((tenancy) => getSubscriptionsList(tenancy)));
+  const subscriptions = responses.flatMap((response) => getResponseData(response).subscriptions || []);
+  const uniqueById = new Map();
+
+  subscriptions.forEach((subscription) => {
+    if (subscription?.id) {
+      uniqueById.set(subscription.id, subscription);
+    }
+  });
+
+  return Array.from(uniqueById.values());
 };
 
 /**
@@ -763,8 +890,8 @@ export const getSwapPlans = async () => {
     return plans;
   }
 
-  const response = await getSubscriptionsList('SWAP.SUB.TYPE.ITEMS.STORE');
-  return (getResponseData(response).subscriptions || []).map(formatPlanLabel);
+  const subscriptions = await getAllSubscriptions();
+  return subscriptions.map(formatPlanLabel);
 };
 
 export const getItemEntryOptions = async () => {
