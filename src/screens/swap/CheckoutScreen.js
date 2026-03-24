@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { findProductByQrCode, getCustomerCheckoutCart, getCustomerProfile } from '../../api/swapOpsApi';
 import { Card } from '../../components/Card';
-import { Row } from '../../components/Row';
+import { ProductCard } from '../../components/ProductCard';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
 import { styles } from '../../styles/commonStyles';
@@ -134,12 +134,7 @@ export const CheckoutScreen = ({ pop, customerEmail }) => {
         </View>
       ) : (
         cartItems.map((item) => (
-          <View key={item.sku} style={styles.listItem}>
-            <Row label="SKU" value={item.sku} />
-            <Row label="Item" value={item.name} />
-            <Row label="Size" value={item.size} />
-            <Row label="Points" value={item.points} />
-          </View>
+          <ProductCard key={item.sku} product={{ ...item, price: item.points }} subtitle={`SKU: ${item.sku}`} />
         ))
       )}
 
