@@ -47,9 +47,10 @@ export const HomeScreen = ({ push, mode, setMode }) => {
       {activeMode === 'booth' ? (
         <>
           <Text style={styles.sectionTitle}>Booth</Text>
-          <Card title="Booth Applications" subtitle="View by period, approve/reject booth sellers" onPress={() => push('boothApplications')} />
-          <Card title="Product Review" subtitle="Approve or reject seller products" onPress={() => push('boothReview')} />
-          <Card title="Print Product Tags" subtitle="Generate printable tags for approved products" onPress={() => push('boothTags')} />
+          <Card title="View All Booths" subtitle="Browse and manage booth approvals" onPress={() => push('booths')} />
+          <Card title="Search Booth" subtitle="Find specific booth by name or seller" onPress={() => push('booths', { focusSearch: true })} />
+          <Card title="Completed Sales" subtitle="Review past transactions" onPress={() => push('boothAllCheckouts')} />
+          <Card title="Checkout" subtitle="Process new sale" onPress={() => push('boothCheckout')} />
         </>
       ) : null}
 

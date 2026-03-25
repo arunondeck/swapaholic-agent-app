@@ -5,10 +5,13 @@ import {
   customerOrders,
   customerPickups,
   customerCheckoutCart,
+  mockBoothCheckouts,
+  mockBoothPaymentMethods,
   customerSubscriptions,
   customerSuccessData,
   customerSwappedInItems,
   formatRemainingItems as formatMockRemainingItems,
+  mockSellerBooths,
   getCustomerPickup as getMockCustomerPickup,
   getCustomerProfile as getMockCustomerProfile,
   getCustomerSubscription as getMockCustomerSubscription,
@@ -19,6 +22,21 @@ import {
   plans,
   swapSubscriptionCatalog,
 } from '../data/mockData';
+import {
+  createLiveBoothCheckout,
+  fetchAllBoothCheckouts,
+  fetchBoothCheckout,
+  fetchBoothPaymentMethods,
+  fetchBoothProductById,
+  fetchBoothProducts,
+  fetchBoothProductStatusCounts,
+  fetchSellerBooths,
+  isBoothLiveEnabled,
+  markLiveProductSale,
+  mutateBooth,
+  mutateBoothProduct,
+} from './boothGraphqlApi';
+import { buildBoothProductCode, extractBoothProductIdFromCode } from '../utils/boothProductCode';
 
 /**
  * @typedef {import('../data/mockData').SwapCustomer} SwapCustomer
@@ -82,8 +100,157 @@ const SWAP_API_VERSION = process.env.EXPO_PUBLIC_SWAP_API_VERSION || 'v3';
 const SWAP_USE_MOCK = (process.env.EXPO_PUBLIC_SWAP_USE_MOCK || 'true').toLowerCase() === 'true';
 const EMPTY_ARRAY = [];
 const customerSessionCache = new Map();
+let boothProductsStore = mockBoothProducts.map((product) => ({ ...product }));
+let boothCheckoutsStore = mockBoothCheckouts.map((checkout) => ({
+  ...checkout,
+  items: (checkout.items || []).map((item) => ({ ...item })),
+}));
 
 const getResponseData = (response) => response?.success?.data || {};
+
+const toCurrencyLabel = (value) => `$${Number(value || 0).toFixed(2)}`;
+
+const formatBoothProduct = (product) => ({
+  ...product,
+  brand: product.brand?.name || product.brand || 'NA',
+  size: product.size_on_label || product.size || 'NA',
+  price: toCurrencyLabel(product.listing_price),
+  code:
+    product.code ||
+    `MB-${product.seller_booth?.id || '0'}-${product.seller?.id || '0'}-${product.id || product.dev_booth_product_id || '0'}-${product.brand?.id || '0'}`,
+});
+
+const formatBoothCheckout = (checkout) => ({
+  ...checkout,
+  items: (checkout.items || []).map((item) => ({
+    ...item,
+    booth_product: item.booth_product ? formatBoothProduct(item.booth_product) : null,
+  })),
+});
+
+const getBoothProductStatus = (product) => {
+  if (product.rejected) {
+    return 'rejected';
+  }
+
+  if (product.sold) {
+    return 'sold';
+  }
+
+  if (product.returned_to_seller) {
+    return 'returned';
+  }
+
+  return product.manual_review_passed ? 'approved' : 'pending';
+};
+
+const matchesWhereClause = (record, where = {}) => {
+  if (!where || Object.keys(where).length === 0) {
+    return true;
+  }
+
+  return Object.entries(where).every(([key, value]) => {
+    if (key === '_and') {
+      return Array.isArray(value) ? value.every((clause) => matchesWhereClause(record, clause)) : true;
+    }
+
+    if (key === '_or') {
+      return Array.isArray(value) ? value.some((clause) => matchesWhereClause(record, clause)) : true;
+    }
+
+    if (key.endsWith('_contains')) {
+      const field = key.replace(/_contains$/, '');
+      const target = field.split('.').reduce((acc, part) => acc?.[part], record);
+      return String(target || '')
+        .toLowerCase()
+        .includes(String(value || '').toLowerCase());
+    }
+
+    if (key.endsWith('_gte')) {
+      const field = key.replace(/_gte$/, '');
+      return new Date(record?.[field] || 0).getTime() >= new Date(value).getTime();
+    }
+
+    if (key.endsWith('_lte')) {
+      const field = key.replace(/_lte$/, '');
+      return new Date(record?.[field] || 0).getTime() <= new Date(value).getTime();
+    }
+
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      const target = record?.[key];
+      if (target == null) {
+        return false;
+      }
+      return matchesWhereClause(target, value);
+    }
+
+    if (key === 'seller_booth') {
+      return String(record?.seller_booth?.id || record?.seller_booth || '') === String(value);
+    }
+
+    return record?.[key] === value;
+  });
+};
+
+const getBoothCycle = (booth) => {
+  const now = new Date('2026-03-26T00:00:00.000Z');
+  const start = new Date(booth.booth_start_date);
+  const end = new Date(booth.booth_end_date);
+  const diffDays = Math.round((start.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (end < now) {
+    return 'done';
+  }
+
+  if (start <= now && end >= now) {
+    return 'current';
+  }
+
+  if (diffDays <= 45) {
+    return 'next';
+  }
+
+  return 'upcoming';
+};
+
+const getSellerName = (booth) => [booth.user?.first_name, booth.user?.last_name].filter(Boolean).join(' ') || booth.user?.username || 'Unknown seller';
+
+const getBoothSummary = (booth) => {
+  const products = boothProductsStore.filter((product) => String(product.seller_booth?.id) === String(booth.id));
+
+  return {
+    ...booth,
+    cycle: getBoothCycle(booth),
+    seller: getSellerName(booth),
+    items: products.length,
+    status: booth.is_inactive ? 'inactive' : booth.is_verified ? 'approved' : 'pending',
+  };
+};
+
+const buildLiveBoothDateFilter = (cycle) => {
+  const now = new Date();
+  const today = now.toISOString();
+  const nextWindow = new Date(now);
+  nextWindow.setDate(nextWindow.getDate() + 45);
+  const nextWindowIso = nextWindow.toISOString();
+
+  switch (cycle) {
+    case 'current':
+      return {
+        _and: [{ booth_start_date_lte: today }, { booth_end_date_gte: today }],
+      };
+    case 'next':
+      return {
+        _and: [{ booth_start_date_gt: today }, { booth_start_date_lte: nextWindowIso }],
+      };
+    case 'upcoming':
+      return { booth_start_date_gt: nextWindowIso };
+    case 'done':
+      return { booth_end_date_lt: today };
+    default:
+      return null;
+  }
+};
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number.parseInt(String(value ?? fallback), 10);
@@ -949,10 +1116,307 @@ export const getInspectionProducts = async () => {
 export const getBoothProducts = async () => {
   if (SWAP_USE_MOCK) {
     await delay();
-    return mockBoothProducts;
+    return boothProductsStore.map(formatBoothProduct);
   }
 
-  return EMPTY_ARRAY;
+  const response = await fetchBoothProducts({});
+  return response.products;
+};
+
+export const getSellerBooths = async ({
+  status = 'pending',
+  cycle = 'all',
+  search = '',
+  page = 1,
+  perPage = 50,
+} = {}) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const query = search.trim().toLowerCase();
+    const summaries = mockSellerBooths
+      .map(getBoothSummary)
+      .filter((booth) => {
+        if (status && booth.status !== status) {
+          return false;
+        }
+
+        if (cycle !== 'all' && booth.cycle !== cycle) {
+          return false;
+        }
+
+        if (!query) {
+          return true;
+        }
+
+        return (
+          booth.name.toLowerCase().includes(query) ||
+          booth.business_name?.toLowerCase().includes(query) ||
+          booth.seller.toLowerCase().includes(query)
+        );
+      });
+
+    const totalCount = summaries.length;
+    const start = Math.max(0, (page - 1) * perPage);
+    return {
+      booths: summaries.slice(start, start + perPage),
+      totalCount,
+    };
+  }
+
+  const clauses = [];
+
+  if (status === 'pending') {
+    clauses.push({ is_verified: false });
+  } else if (status === 'approved') {
+    clauses.push({ is_verified: true });
+  } else if (status === 'inactive') {
+    clauses.push({ is_inactive: true });
+  }
+
+  const dateFilter = buildLiveBoothDateFilter(cycle);
+  if (dateFilter) {
+    clauses.push(dateFilter);
+  }
+
+  const query = search.trim();
+  if (query) {
+    clauses.push({
+      _or: [
+        { name_contains: query },
+        { business_name_contains: query },
+        { user: { first_name_contains: query } },
+        { user: { last_name_contains: query } },
+      ],
+    });
+  }
+
+  const where = clauses.length === 0 ? {} : clauses.length === 1 ? clauses[0] : { _and: clauses };
+  const response = await fetchSellerBooths({ where, start: Math.max(0, (page - 1) * perPage), limit: perPage });
+
+  return {
+    booths: response.booths.map((booth) => ({
+      ...booth,
+      seller: getSellerName(booth),
+      items: Array.isArray(booth.booth_products) ? booth.booth_products.length : 0,
+      status: booth.is_inactive ? 'inactive' : booth.is_verified ? 'approved' : 'pending',
+      cycle: getBoothCycle(booth),
+    })),
+    totalCount: response.totalCount,
+  };
+};
+
+export const getBoothProductsByFilter = async ({ boothId, status, search = '' } = {}) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const query = search.trim().toLowerCase();
+    const products = boothProductsStore
+      .filter((product) => (boothId ? String(product.seller_booth?.id) === String(boothId) : true))
+      .filter((product) => (status ? getBoothProductStatus(product) === status : true))
+      .filter((product) => {
+        if (!query) {
+          return true;
+        }
+
+        const formatted = formatBoothProduct(product);
+        return formatted.name.toLowerCase().includes(query) || formatted.code.toLowerCase().includes(query);
+      })
+      .map(formatBoothProduct);
+
+    const booth = mockSellerBooths.find((item) => String(item.id) === String(boothId));
+    const counts = boothProductsStore
+      .filter((product) => String(product.seller_booth?.id) === String(boothId))
+      .reduce(
+        (summary, product) => {
+          summary.total += 1;
+          summary[getBoothProductStatus(product)] += 1;
+          return summary;
+        },
+        { total: 0, pending: 0, approved: 0, sold: 0, rejected: 0, returned: 0 }
+      );
+
+    return {
+      booth: booth ? getBoothSummary(booth) : null,
+      products,
+      counts,
+    };
+  }
+
+  const boothResponse = await fetchSellerBooths({ where: { id: boothId }, start: 0, limit: 1 });
+  const booth = boothResponse.booths?.[0] || null;
+  const productWhere = { seller_booth: boothId };
+
+  if (status === 'pending') {
+    Object.assign(productWhere, { manual_review_passed: false, rejected: false, returned_to_seller: false, sold: false });
+  } else if (status === 'approved') {
+    Object.assign(productWhere, { manual_review_passed: true, rejected: false, returned_to_seller: false, sold: false });
+  } else if (status === 'sold') {
+    Object.assign(productWhere, { sold: true });
+  } else if (status === 'rejected') {
+    Object.assign(productWhere, { rejected: true });
+  }
+
+  const productsResponse = await fetchBoothProducts(productWhere);
+  const counts = await fetchBoothProductStatusCounts(boothId);
+  const returnedResponse = await fetchBoothProducts({ seller_booth: boothId, returned_to_seller: true });
+  const filteredProducts = search.trim()
+    ? productsResponse.products.filter((product) => {
+        const query = search.trim().toLowerCase();
+        return product.name?.toLowerCase().includes(query) || product.code?.toLowerCase().includes(query);
+      })
+    : productsResponse.products;
+
+  return {
+    booth: booth
+      ? {
+          ...booth,
+          seller: getSellerName(booth),
+          items: Array.isArray(booth.booth_products) ? booth.booth_products.length : counts.total,
+          status: booth.is_inactive ? 'inactive' : booth.is_verified ? 'approved' : 'pending',
+          cycle: getBoothCycle(booth),
+        }
+      : null,
+    products: filteredProducts,
+    counts: {
+      ...counts,
+      returned: returnedResponse.totalCount,
+    },
+  };
+};
+
+export const getBoothProductById = async (idOrCode) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const productId = extractBoothProductIdFromCode(idOrCode) || idOrCode;
+    const product = boothProductsStore.find((entry) => String(entry.id) === String(productId));
+    return product ? formatBoothProduct(product) : null;
+  }
+
+  const productId = extractBoothProductIdFromCode(idOrCode) || idOrCode;
+  return fetchBoothProductById(productId);
+};
+
+export const updateBoothProduct = async (id, updates) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    boothProductsStore = boothProductsStore.map((product) => (String(product.id) === String(id) ? { ...product, ...updates } : product));
+    const updated = boothProductsStore.find((product) => String(product.id) === String(id));
+    return updated ? formatBoothProduct(updated) : null;
+  }
+
+  const updatedProduct = await mutateBoothProduct(id, updates);
+  if (updates?.manual_review_passed && updatedProduct?.seller_booth?.id) {
+    await mutateBooth(updatedProduct.seller_booth.id, { is_verified: true });
+  }
+  return updatedProduct;
+};
+
+export const getBoothPaymentMethods = async () => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return mockBoothPaymentMethods;
+  }
+
+  return fetchBoothPaymentMethods();
+};
+
+export const createBoothCheckout = async (checkoutData) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const paymentMethod = mockBoothPaymentMethods.find((method) => method.id === checkoutData.Booth_payment_method) || null;
+    const items = (checkoutData.items || [])
+      .map((item) => {
+        const product = boothProductsStore.find((entry) => String(entry.id) === String(item.booth_product));
+        return product ? { quantity: item.quantity || 1, booth_product: product } : null;
+      })
+      .filter(Boolean);
+
+    boothProductsStore = boothProductsStore.map((product) =>
+      items.some((item) => String(item.booth_product.id) === String(product.id))
+        ? { ...product, sold: true, stock_quantity: 0 }
+        : product
+    );
+
+    const checkout = {
+      id: String(4082 + boothCheckoutsStore.length),
+      Cart_value: Number(checkoutData.Cart_value || 0),
+      created_at: checkoutData.checkout_date || new Date().toISOString(),
+      checkout_date: checkoutData.checkout_date || new Date().toISOString(),
+      Booth_payment_method: paymentMethod,
+      items,
+    };
+
+    boothCheckoutsStore = [checkout, ...boothCheckoutsStore];
+    return formatBoothCheckout(checkout);
+  }
+
+  const checkout = await createLiveBoothCheckout(checkoutData);
+  for (const item of checkoutData.items || []) {
+    await markLiveProductSale(item.booth_product, item.quantity || 1);
+  }
+  return checkout;
+};
+
+export const getAllBoothCheckouts = async ({
+  startDate,
+  endDate,
+  page = 1,
+  perPage = 50,
+} = {}) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const filtered = boothCheckoutsStore.filter((checkout) => {
+      const timestamp = new Date(checkout.checkout_date).getTime();
+      if (startDate && timestamp < new Date(startDate).getTime()) {
+        return false;
+      }
+      if (endDate && timestamp > new Date(endDate).getTime()) {
+        return false;
+      }
+      return true;
+    });
+
+    const totalCount = filtered.length;
+    const totalCartValue = filtered.reduce((sum, checkout) => sum + Number(checkout.Cart_value || 0), 0);
+    const totalItemsSold = filtered.reduce(
+      (sum, checkout) => sum + (checkout.items || []).reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0),
+      0
+    );
+    const start = Math.max(0, (page - 1) * perPage);
+
+    return {
+      checkouts: filtered.slice(start, start + perPage).map(formatBoothCheckout),
+      totalCount,
+      aggregates: {
+        totalCheckouts: totalCount,
+        totalCartValue,
+        totalItemsSold,
+      },
+    };
+  }
+
+  const where = {};
+  if (startDate) {
+    where.checkout_date_gte = startDate;
+  }
+  if (endDate) {
+    where.checkout_date_lte = endDate;
+  }
+  return fetchAllBoothCheckouts({
+    start: Math.max(0, (page - 1) * perPage),
+    limit: perPage,
+    sort: 'checkout_date:desc',
+    where: Object.keys(where).length ? where : undefined,
+  });
+};
+
+export const getBoothCheckout = async (id) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const checkout = boothCheckoutsStore.find((entry) => String(entry.id) === String(id));
+    return { checkout: checkout ? formatBoothCheckout(checkout) : null };
+  }
+
+  return fetchBoothCheckout(id);
 };
 
 export const getPickupStatus = (pickup) => getMockPickupStatus(pickup);

@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BackHandler } from 'react-native';
 import { LoaderProvider } from './src/context/LoaderContext';
+import { useBoothAuthStore } from './src/store/boothAuthStore';
 
 import { HomeScreen } from './src/screens/HomeScreen';
 import { BoothAllCheckoutsScreen } from './src/screens/booth/BoothAllCheckoutsScreen';
 import { BoothApplicationsScreen } from './src/screens/booth/BoothApplicationsScreen';
 import { BoothCheckoutScreen } from './src/screens/booth/BoothCheckoutScreen';
+import { BoothCheckoutDetailScreen } from './src/screens/booth/BoothCheckoutDetailScreen';
 import { BoothDetailsScreen } from './src/screens/booth/BoothDetailsScreen';
+import { BoothLoginScreen } from './src/screens/booth/BoothLoginScreen';
 import { BoothsScreen } from './src/screens/booth/BoothsScreen';
 import { BoothOpsScreen } from './src/screens/booth/BoothOpsScreen';
 import { BoothReviewScreen } from './src/screens/booth/BoothReviewScreen';
@@ -36,6 +39,7 @@ import { SwapTagsScreen } from './src/screens/swap/SwapTagsScreen';
 
 export default function App() {
   const [stack, setStack] = useState([{ route: 'home', params: { mode: 'swap' } }]);
+  const hydrateBoothAuth = useBoothAuthStore((state) => state.hydrate);
 
   const current = stack[stack.length - 1];
   const push = (route, params = {}) => setStack((prev) => [...prev, { route, params }]);
@@ -44,6 +48,10 @@ export default function App() {
     setStack((prev) =>
       prev.map((entry, index) => (index === prev.length - 1 ? { ...entry, params: { ...entry.params, ...params } } : entry))
     );
+
+  useEffect(() => {
+    hydrateBoothAuth();
+  }, [hydrateBoothAuth]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -62,10 +70,12 @@ export default function App() {
     () => ({
       home: (params) => <HomeScreen push={push} mode={params?.mode || 'swap'} setMode={(mode) => updateCurrentParams({ mode })} />,
       booth: () => <BoothOpsScreen push={push} pop={pop} />,
+      boothLogin: () => <BoothLoginScreen pop={pop} />,
       booths: (params) => <BoothsScreen push={push} pop={pop} focusSearch={params?.focusSearch} />,
-      boothDetails: (params) => <BoothDetailsScreen pop={pop} boothId={params?.boothId} />,
-      boothAllCheckouts: () => <BoothAllCheckoutsScreen pop={pop} />,
-      boothCheckout: () => <BoothCheckoutScreen pop={pop} />,
+      boothDetails: (params) => <BoothDetailsScreen push={push} pop={pop} boothId={params?.boothId} />,
+      boothAllCheckouts: () => <BoothAllCheckoutsScreen pop={pop} push={push} />,
+      boothCheckout: () => <BoothCheckoutScreen pop={pop} push={push} />,
+      boothCheckoutDetail: (params) => <BoothCheckoutDetailScreen push={push} pop={pop} checkoutId={params?.checkoutId} />,
       boothApplications: () => <BoothApplicationsScreen pop={pop} />,
       boothReview: () => <BoothReviewScreen pop={pop} />,
       boothTags: () => <BoothTagsScreen pop={pop} />,

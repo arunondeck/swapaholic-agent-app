@@ -1,49 +1,118 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { isBoothLiveEnabled } from '../../api/boothGraphqlApi';
+import { getAllBoothCheckouts } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
+import { useBoothAuthStore } from '../../store/boothAuthStore';
 import { styles } from '../../styles/commonStyles';
 
-const CHECKOUTS = [
-  { id: '#4081', date: 'Mar 20, 2026, 05:44 PM', items: 1, total: '$32.00' },
-  { id: '#4080', date: 'Mar 20, 2026, 03:37 PM', items: 1, total: '$20.00' },
-  { id: '#4079', date: 'Mar 20, 2026, 02:26 PM', items: 2, total: '$120.00' },
-  { id: '#4078', date: 'Mar 20, 2026, 11:26 AM', items: 1, total: '$10.00' },
-  { id: '#4077', date: 'Mar 20, 2026, 10:19 AM', items: 1, total: '$39.00' },
-];
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
-export const BoothAllCheckoutsScreen = ({ pop }) => {
-  const [startDate, setStartDate] = useState('02/01/2026');
-  const [endDate, setEndDate] = useState('03/21/2026');
+const formatDateInput = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getDefaultDateRange = () => {
+  const today = new Date();
+  const startOfPrevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  return { start: formatDateInput(startOfPrevMonth), end: formatDateInput(today) };
+};
+
+const toStartOfDayIso = (value) => (value ? new Date(`${value}T00:00:00`).toISOString() : null);
+const toEndOfDayIso = (value) => (value ? new Date(`${value}T23:59:59`).toISOString() : null);
+
+export const BoothAllCheckoutsScreen = ({ pop, push }) => {
+  const token = useBoothAuthStore((state) => state.token);
+  const defaults = useMemo(() => getDefaultDateRange(), []);
+  const [pendingStartDate, setPendingStartDate] = useState(defaults.start);
+  const [pendingEndDate, setPendingEndDate] = useState(defaults.end);
+  const [startDate, setStartDate] = useState(defaults.start);
+  const [endDate, setEndDate] = useState(defaults.end);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
+  const [checkouts, setCheckouts] = useState([]);
+  const [summary, setSummary] = useState({ totalCheckouts: 0, totalCartValue: 0, totalItemsSold: 0 });
+  const [totalCount, setTotalCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const requiresLogin = isBoothLiveEnabled() && !token;
 
-  const summary = useMemo(() => {
-    const totalCheckouts = CHECKOUTS.length;
-    const totalAmount = CHECKOUTS.reduce((acc, item) => acc + Number(item.total.replace(/[$,]/g, '')), 0);
-    const totalItems = CHECKOUTS.reduce((acc, item) => acc + item.items, 0);
-
-    return { totalCheckouts, totalAmount, totalItems };
-  }, []);
-
-  const totalPages = Math.max(1, Math.ceil(CHECKOUTS.length / perPage));
+  const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
   const safePage = Math.min(page, totalPages);
-  const pagedCheckouts = CHECKOUTS.slice((safePage - 1) * perPage, safePage * perPage);
+
+  useEffect(() => {
+    if (requiresLogin) {
+      return undefined;
+    }
+
+    let active = true;
+
+    const loadCheckouts = async () => {
+      setLoading(true);
+      setError('');
+
+      try {
+        const response = await getAllBoothCheckouts({
+          startDate: toStartOfDayIso(startDate),
+          endDate: toEndOfDayIso(endDate),
+          page: safePage,
+          perPage,
+        });
+
+        if (!active) {
+          return;
+        }
+
+        setCheckouts(response.checkouts);
+        setSummary(response.aggregates);
+        setTotalCount(response.totalCount);
+      } catch (loadError) {
+        if (active) {
+          setError(loadError.message || 'Unable to load checkouts');
+          setCheckouts([]);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadCheckouts();
+
+    return () => {
+      active = false;
+    };
+  }, [endDate, perPage, requiresLogin, safePage, startDate]);
 
   return (
-    <ScreenShell title="All Checkouts" subtitle="Checkout summary and list" onBack={pop} backgroundColor="#f8fafc">
+    <ScreenShell title="All Checkouts" subtitle={error || 'Checkout summary and list'} onBack={pop} backgroundColor="#f8fafc">
       <View style={styles.formCard}>
         <Text style={styles.sectionTitle}>Filters</Text>
-        <TextInput value={startDate} onChangeText={setStartDate} style={styles.input} placeholder="Start date" placeholderTextColor="#94a3b8" />
-        <TextInput value={endDate} onChangeText={setEndDate} style={styles.input} placeholder="End date" placeholderTextColor="#94a3b8" />
+        <TextInput value={pendingStartDate} onChangeText={setPendingStartDate} style={styles.input} placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8" />
+        <TextInput value={pendingEndDate} onChangeText={setPendingEndDate} style={styles.input} placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8" />
         <View style={styles.row}>
-          <TouchableOpacity style={[styles.primaryButton, { flex: 1 }]}>
+          <TouchableOpacity
+            style={[styles.primaryButton, { flex: 1 }]}
+            onPress={() => {
+              setStartDate(pendingStartDate);
+              setEndDate(pendingEndDate);
+              setPage(1);
+            }}
+          >
             <Text style={styles.primaryButtonText}>Apply Filters</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.secondaryButton, { flex: 1 }]}
             onPress={() => {
-              setStartDate('02/01/2026');
-              setEndDate('03/21/2026');
+              setPendingStartDate('');
+              setPendingEndDate('');
+              setStartDate('');
+              setEndDate('');
+              setPage(1);
             }}
           >
             <Text style={styles.secondaryButtonText}>Clear Filters</Text>
@@ -53,19 +122,19 @@ export const BoothAllCheckoutsScreen = ({ pop }) => {
 
       <View style={styles.summaryCard}>
         <Text style={styles.summarySubheading}>Checkout Summary</Text>
-        <Text style={styles.summaryText}>{startDate} 12:00:00 AM - {endDate} 11:59:59 PM</Text>
-        <View style={[styles.statsGrid, { marginTop: 10 }]}> 
+        <Text style={styles.summaryText}>{startDate || 'Earliest'} - {endDate || 'Latest'}</Text>
+        <View style={[styles.statsGrid, { marginTop: 10 }]}>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Total Checkouts</Text>
             <Text style={styles.statValue}>{summary.totalCheckouts}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Total Amount</Text>
-            <Text style={styles.statValue}>${summary.totalAmount.toFixed(2)}</Text>
+            <Text style={styles.statValue}>${Number(summary.totalCartValue || 0).toFixed(2)}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Items Sold</Text>
-            <Text style={styles.statValue}>{summary.totalItems}</Text>
+            <Text style={styles.statValue}>{summary.totalItemsSold}</Text>
           </View>
         </View>
       </View>
@@ -75,30 +144,68 @@ export const BoothAllCheckoutsScreen = ({ pop }) => {
           <TouchableOpacity onPress={() => setPage((prev) => Math.max(1, prev - 1))} style={styles.secondaryButton}>
             <Text style={styles.secondaryButtonText}>Prev</Text>
           </TouchableOpacity>
-          <Text style={[styles.rowValue, { alignSelf: 'center' }]}>Page {safePage} of {totalPages}</Text>
+          <Text style={[styles.rowValue, { alignSelf: 'center' }]}>
+            Page {safePage} of {totalPages}
+          </Text>
           <TouchableOpacity onPress={() => setPage((prev) => Math.min(totalPages, prev + 1))} style={styles.secondaryButton}>
             <Text style={styles.secondaryButtonText}>Next</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.chipRow}>
-          {[25, 50, 100].map((size) => (
-            <TouchableOpacity key={size} onPress={() => setPerPage(size)} style={[styles.chip, perPage === size && styles.chipActive]}>
+          {PAGE_SIZE_OPTIONS.map((size) => (
+            <TouchableOpacity
+              key={size}
+              onPress={() => {
+                setPerPage(size);
+                setPage(1);
+              }}
+              style={[styles.chip, perPage === size && styles.chipActive]}
+            >
               <Text style={styles.chipText}>{size} / page</Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
-      {pagedCheckouts.map((checkout) => (
-        <View key={checkout.id} style={styles.listItem}>
-          <Text style={styles.itemMeta}>{checkout.date}</Text>
-          <View style={styles.row}>
-            <Text style={[styles.cardTitle, { color: '#2563eb' }]}>{checkout.id}</Text>
-            <Text style={styles.rowValue}>{checkout.items} items</Text>
-            <Text style={[styles.cardTitle, { color: '#ef4444' }]}>{checkout.total}</Text>
-          </View>
+      {requiresLogin ? (
+        <View style={styles.formCard}>
+          <Text style={styles.cardTitle}>Sign in required</Text>
+          <Text style={styles.cardSubtitle}>Authenticate with the booth backend before loading live checkout history.</Text>
+          <TouchableOpacity style={styles.primaryButton} onPress={() => push('boothLogin')}>
+            <Text style={styles.primaryButtonText}>Open Booth Login</Text>
+          </TouchableOpacity>
         </View>
-      ))}
+      ) : null}
+
+      {loading ? (
+        <View style={styles.formCard}>
+          <Text style={styles.cardSubtitle}>Loading checkouts...</Text>
+        </View>
+      ) : null}
+
+      {!requiresLogin && !loading && checkouts.length === 0 ? (
+        <View style={styles.formCard}>
+          <Text style={[styles.cardTitle, { textAlign: 'center' }]}>No checkouts found</Text>
+          <Text style={[styles.helperText, { textAlign: 'center' }]}>No booth sales match the selected date range.</Text>
+        </View>
+      ) : null}
+
+      {!requiresLogin && !loading
+        ? checkouts.map((checkout) => {
+            const itemCount = (checkout.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+            return (
+              <TouchableOpacity key={checkout.id} style={styles.listItem} onPress={() => push('boothCheckoutDetail', { checkoutId: checkout.id })}>
+                <Text style={styles.itemMeta}>{new Date(checkout.checkout_date).toLocaleString()}</Text>
+                <View style={styles.row}>
+                  <Text style={[styles.cardTitle, { color: '#2563eb' }]}>#{checkout.id}</Text>
+                  <Text style={styles.rowValue}>{itemCount} items</Text>
+                  <Text style={[styles.cardTitle, { color: '#ef4444' }]}>${Number(checkout.Cart_value || 0).toFixed(2)}</Text>
+                </View>
+                <Text style={styles.helperText}>{checkout.Booth_payment_method?.method || 'Unknown payment method'}</Text>
+              </TouchableOpacity>
+            );
+          })
+        : null}
     </ScreenShell>
   );
 };

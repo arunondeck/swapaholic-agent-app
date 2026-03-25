@@ -335,6 +335,18 @@ export const styles = StyleSheet.create({
     padding: 14,
     gap: 6,
   },
+  cameraFrame: {
+    marginTop: 8,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#67e8f9',
+    backgroundColor: '#0f172a',
+  },
+  cameraPreview: {
+    width: '100%',
+    height: 280,
+  },
   quickActionsRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
   quickActionButton: {
     flex: 1,

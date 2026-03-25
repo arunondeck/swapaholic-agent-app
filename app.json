@@ -21,7 +21,7 @@
       }
     },
     "web": {
-      "favicon": "./src/images/favicon.ico"
+      "favicon": "./src/images/app-icon.png"
     },
     "extra": {
       "eas": {
