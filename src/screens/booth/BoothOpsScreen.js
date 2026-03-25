@@ -3,13 +3,13 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import { isBoothLiveEnabled } from '../../api/boothGraphqlApi';
 import { Card } from '../../components/Card';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useBoothAuthStore } from '../../store/boothAuthStore';
+import { useAppSessionStore } from '../../store/appSessionStore';
 import { styles } from '../../styles/commonStyles';
 
 export const BoothOpsScreen = ({ push, pop }) => {
-  const token = useBoothAuthStore((state) => state.token);
-  const user = useBoothAuthStore((state) => state.user);
-  const logout = useBoothAuthStore((state) => state.logout);
+  const token = useAppSessionStore((state) => state.token);
+  const user = useAppSessionStore((state) => state.user);
+  const logout = useAppSessionStore((state) => state.logout);
   const liveMode = isBoothLiveEnabled();
   const isAuthenticated = Boolean(token);
 

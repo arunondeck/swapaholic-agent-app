@@ -4,13 +4,13 @@ import { isBoothLiveEnabled } from '../../api/boothGraphqlApi';
 import { getBoothProductsByFilter, updateBoothProduct } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
 import { generateBoothProductLabel, isBoothProductPrinted } from '../../services/boothPrintService';
-import { useBoothAuthStore } from '../../store/boothAuthStore';
+import { useAppSessionStore } from '../../store/appSessionStore';
 import { styles } from '../../styles/commonStyles';
 
 const productTabs = ['pending', 'approved', 'sold', 'rejected'];
 
 export const BoothDetailsScreen = ({ pop, push, boothId }) => {
-  const token = useBoothAuthStore((state) => state.token);
+  const token = useAppSessionStore((state) => state.token);
   const [status, setStatus] = useState('pending');
   const [search, setSearch] = useState('');
   const [booth, setBooth] = useState(null);

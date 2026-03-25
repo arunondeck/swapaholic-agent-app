@@ -1,21 +1,27 @@
 import React, { useState } from 'react';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ScreenShell } from '../../components/ScreenShell';
-import { useBoothAuthStore } from '../../store/boothAuthStore';
+import { ActivityIndicator, Image, SafeAreaView, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import appConfig from '../../../app.json';
+import { useAppSessionStore } from '../../store/appSessionStore';
 import { styles } from '../../styles/commonStyles';
 
+const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || appConfig.expo?.name || 'Swapaholic Agent';
+const APP_VERSION = appConfig.expo?.version || '0.0.1';
+const LOGO_URL =
+  process.env.EXPO_PUBLIC_BOOTH_LOGO_URL ||
+  'https://images.pexels.com/photos/5632402/pexels-photo-5632402.jpeg?auto=compress&cs=tinysrgb&w=200&h=200&fit=crop';
+
 export const BoothLoginScreen = ({ pop }) => {
-  const login = useBoothAuthStore((state) => state.login);
-  const loading = useBoothAuthStore((state) => state.loading);
-  const storeError = useBoothAuthStore((state) => state.error);
-  const user = useBoothAuthStore((state) => state.user);
+  const login = useAppSessionStore((state) => state.login);
+  const loading = useAppSessionStore((state) => state.loading);
+  const storeError = useAppSessionStore((state) => state.error);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   const onLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      setError('Enter both email and password.');
+      setError('Please enter email and password');
       return;
     }
 
@@ -24,45 +30,79 @@ export const BoothLoginScreen = ({ pop }) => {
       await login(email.trim(), password);
       pop();
     } catch (loginError) {
-      setError(loginError.message || 'Unable to sign in.');
+      setError(loginError.message || 'Network error. Please try again.');
     }
   };
 
   return (
-    <ScreenShell title="Booth Login" subtitle="Sign in to the live booth GraphQL backend" onBack={pop} backgroundColor="#e0f2fe">
-      <View style={styles.formCard}>
-        <Text style={styles.selectLabel}>Email</Text>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholder="seller@swapaholic.com"
-          placeholderTextColor="#94a3b8"
-          style={styles.input}
-        />
-        <Text style={styles.selectLabel}>Password</Text>
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          placeholder="Password"
-          placeholderTextColor="#94a3b8"
-          style={styles.input}
-        />
-        {error || storeError ? <Text style={[styles.helperText, { color: '#dc2626' }]}>{error || storeError}</Text> : null}
-        <TouchableOpacity style={[styles.primaryButton, loading && styles.primaryButtonDisabled]} onPress={onLogin} disabled={loading}>
-          <Text style={styles.primaryButtonText}>{loading ? 'Signing In...' : 'Sign In'}</Text>
-        </TouchableOpacity>
-      </View>
+    <LinearGradient colors={['#667eea', '#764ba2']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.loginPage}>
+      <SafeAreaView style={styles.loginSafeArea}>
+        <StatusBar barStyle="light-content" />
+        <ScrollView contentContainerStyle={styles.loginScrollContent} keyboardShouldPersistTaps="handled">
+          <View style={styles.loginContainer}>
+            <View style={styles.loginBranding}>
+              <Text style={styles.loginAppName}>{APP_NAME}</Text>
+              <View style={styles.loginLogoContainer}>
+                <Image source={{ uri: LOGO_URL }} style={styles.loginLogo} />
+              </View>
+              <Text style={styles.loginVersion}>Version {APP_VERSION}</Text>
+            </View>
 
-      {user ? (
-        <View style={styles.formCard}>
-          <Text style={styles.cardTitle}>Current Session</Text>
-          <Text style={styles.cardSubtitle}>{user.first_name || user.username || user.email}</Text>
-          <Text style={styles.helperText}>{user.email || 'No email available'}</Text>
-        </View>
-      ) : null}
-    </ScreenShell>
+            <View style={styles.loginCard}>
+              <View style={styles.loginCardHeader}>
+                <Text style={styles.loginCardTitle}>Sign in</Text>
+                {/* <Text style={styles.loginCardSubtitle}>Sign in to continue</Text> */}
+              </View>
+
+              <View style={styles.loginCardContent}>
+                <View style={styles.loginFormGroup}>
+                  <Text style={styles.loginFormLabel}>Email</Text>
+                  <TextInput
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    placeholder="Enter your email"
+                    placeholderTextColor="#adb5bd"
+                    editable={!loading}
+                    returnKeyType="next"
+                    style={styles.loginFormInput}
+                  />
+                </View>
+
+                <View style={styles.loginFormGroup}>
+                  <Text style={styles.loginFormLabel}>Password</Text>
+                  <TextInput
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    placeholder="Enter your password"
+                    placeholderTextColor="#adb5bd"
+                    editable={!loading}
+                    onSubmitEditing={onLogin}
+                    style={styles.loginFormInput}
+                  />
+                </View>
+
+                {error || storeError ? (
+                  <View style={styles.loginErrorMessage}>
+                    <Text style={styles.loginErrorIcon}>!</Text>
+                    <Text style={styles.loginErrorText}>{error || storeError}</Text>
+                  </View>
+                ) : null}
+
+                <TouchableOpacity
+                  style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                  onPress={onLogin}
+                  disabled={loading}
+                >
+                  {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.loginButtonText}>Sign In</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 };

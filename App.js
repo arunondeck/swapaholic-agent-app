@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BackHandler } from 'react-native';
+import { BackHandler, Text, View } from 'react-native';
 import { LoaderProvider } from './src/context/LoaderContext';
-import { useBoothAuthStore } from './src/store/boothAuthStore';
+import { useAppSessionStore } from './src/store/appSessionStore';
+import { ScreenShell } from './src/components/ScreenShell';
+import { styles } from './src/styles/commonStyles';
 
 import { HomeScreen } from './src/screens/HomeScreen';
 import { BoothAllCheckoutsScreen } from './src/screens/booth/BoothAllCheckoutsScreen';
@@ -39,7 +41,10 @@ import { SwapTagsScreen } from './src/screens/swap/SwapTagsScreen';
 
 export default function App() {
   const [stack, setStack] = useState([{ route: 'home', params: { mode: 'swap' } }]);
-  const hydrateBoothAuth = useBoothAuthStore((state) => state.hydrate);
+  const hydrateAppSession = useAppSessionStore((state) => state.hydrate);
+  const hydrated = useAppSessionStore((state) => state.hydrated);
+  const checkingSession = useAppSessionStore((state) => state.checkingSession);
+  const token = useAppSessionStore((state) => state.token);
 
   const current = stack[stack.length - 1];
   const push = (route, params = {}) => setStack((prev) => [...prev, { route, params }]);
@@ -50,8 +55,8 @@ export default function App() {
     );
 
   useEffect(() => {
-    hydrateBoothAuth();
-  }, [hydrateBoothAuth]);
+    hydrateAppSession();
+  }, [hydrateAppSession]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -121,5 +126,24 @@ export default function App() {
     [stack.length]
   );
 
-  return <LoaderProvider>{screens[current.route]?.(current.params)}</LoaderProvider>;
+  const renderCurrentScreen = () => {
+    if (!hydrated || checkingSession) {
+      return (
+        <ScreenShell title="Swapaholic" subtitle="Checking session..." backgroundColor="#f8fafc">
+          <View style={styles.formCard}>
+            <Text style={styles.cardTitle}>Loading session</Text>
+            <Text style={styles.cardSubtitle}>Validating the saved token before opening the app.</Text>
+          </View>
+        </ScreenShell>
+      );
+    }
+
+    if (!token) {
+      return <BoothLoginScreen />;
+    }
+
+    return screens[current.route]?.(current.params) || null;
+  };
+
+  return <LoaderProvider>{renderCurrentScreen()}</LoaderProvider>;
 }

@@ -3,3 +3,4 @@
 /.expo/
 /.codex-run
 /dist
+.env.local

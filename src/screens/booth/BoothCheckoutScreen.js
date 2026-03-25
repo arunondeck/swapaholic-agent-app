@@ -4,13 +4,13 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { isBoothLiveEnabled } from '../../api/boothGraphqlApi';
 import { createBoothCheckout, getBoothPaymentMethods, getBoothProductById } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useBoothAuthStore } from '../../store/boothAuthStore';
+import { useAppSessionStore } from '../../store/appSessionStore';
 import { styles } from '../../styles/commonStyles';
 
 const BARCODE_TYPES = ['qr', 'code128', 'code39', 'code93', 'codabar'];
 
 export const BoothCheckoutScreen = ({ pop, push }) => {
-  const token = useBoothAuthStore((state) => state.token);
+  const token = useAppSessionStore((state) => state.token);
   const [productCode, setProductCode] = useState('');
   const [cart, setCart] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);

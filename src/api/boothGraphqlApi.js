@@ -1,7 +1,7 @@
 import { buildBoothProductCode } from '../utils/boothProductCode';
-import { getStoredBoothToken } from '../store/boothAuthStorage';
+import { getCachedStoredAppSession, getStoredAppToken } from '../store/appSessionStorage';
 
-const BOOTH_GRAPHQL_URL = process.env.EXPO_PUBLIC_BOOTH_GRAPHQL_URL || 'https://mkt-prod-api.swapaholic.com/graphql';
+const BOOTH_GRAPHQL_URL = process.env.EXPO_PUBLIC_BOOTH_GRAPHQL_URL || '';
 const BOOTH_USE_MOCK = (process.env.EXPO_PUBLIC_BOOTH_USE_MOCK || process.env.EXPO_PUBLIC_SWAP_USE_MOCK || 'true').toLowerCase() === 'true';
 
 const LOGIN_MUTATION = `
@@ -278,12 +278,16 @@ const formatBoothProduct = (product) => ({
 });
 
 const requestBoothGraphql = async (query, variables = {}, { requiresAuth = true } = {}) => {
+  if (!BOOTH_GRAPHQL_URL) {
+    throw new Error('EXPO_PUBLIC_BOOTH_GRAPHQL_URL is required in .env when EXPO_PUBLIC_BOOTH_USE_MOCK is false.');
+  }
+
   const headers = {
     'Content-Type': 'application/json',
   };
 
   if (requiresAuth) {
-    const token = await getStoredBoothToken();
+    const token = getCachedStoredAppSession()?.token || (await getStoredAppToken());
     if (!token) {
       throw new Error('Booth sign-in required.');
     }

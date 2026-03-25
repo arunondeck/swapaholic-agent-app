@@ -7,8 +7,13 @@ This module supports both **live API** and **mock mode**.
 Set these in Expo environment (`.env`, EAS env, or shell):
 
 - `EXPO_PUBLIC_SWAP_API_URL` - base URL, example: `https://api.example.com`
+- `EXPO_PUBLIC_SWAP_WALLET_API_URL` - wallet API base URL
 - `EXPO_PUBLIC_SWAP_API_VERSION` - version segment, example: `v3`
 - `EXPO_PUBLIC_SWAP_USE_MOCK` - `true` or `false`
+- `EXPO_PUBLIC_BOOTH_GRAPHQL_URL` - booth GraphQL endpoint
+- `EXPO_PUBLIC_BOOTH_USE_MOCK` - `true` or `false`
+- `EXPO_PUBLIC_APP_NAME` - full app display name
+- `EXPO_PUBLIC_BOOTH_LOGO_URL` - login screen logo image URL
 
 When `EXPO_PUBLIC_SWAP_USE_MOCK=true`, all supported API methods return local mock responses.
 

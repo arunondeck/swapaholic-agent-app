@@ -31,7 +31,6 @@ import {
   fetchBoothProducts,
   fetchBoothProductStatusCounts,
   fetchSellerBooths,
-  isBoothLiveEnabled,
   markLiveProductSale,
   mutateBooth,
   mutateBoothProduct,
@@ -94,10 +93,14 @@ import { buildBoothProductCode, extractBoothProductIdFromCode } from '../utils/b
  */
 const delay = (ms = 150) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const SWAP_API_URL = (process.env.EXPO_PUBLIC_SWAP_API_URL || 'https://api.swapaholic.com/api').replace(/\/$/, '');
-const SWAP_WALLET_API_URL = (process.env.EXPO_PUBLIC_SWAP_WALLET_API_URL || 'https://walletapi.swapaholic.com/api').replace(/\/$/, '');
-const SWAP_API_VERSION = process.env.EXPO_PUBLIC_SWAP_API_VERSION || 'v3';
+const SWAP_API_URL = (process.env.EXPO_PUBLIC_SWAP_API_URL || '').replace(/\/$/, '');
+const SWAP_WALLET_API_URL = (process.env.EXPO_PUBLIC_SWAP_WALLET_API_URL || '').replace(/\/$/, '');
+const SWAP_API_VERSION = process.env.EXPO_PUBLIC_SWAP_API_VERSION || '';
 const SWAP_USE_MOCK = (process.env.EXPO_PUBLIC_SWAP_USE_MOCK || 'true').toLowerCase() === 'true';
+const BOOTH_USE_MOCK = (process.env.EXPO_PUBLIC_BOOTH_USE_MOCK || process.env.EXPO_PUBLIC_SWAP_USE_MOCK || 'true').toLowerCase() === 'true';
+const APP_LOGIN_PATH = 'guests/customers/get-started';
+const APP_GUEST_REGISTER_PATH = 'guests/register';
+const APP_LOGIN_TENANCY = 'SWAP.AUTH.TYPE.EMAIL';
 const EMPTY_ARRAY = [];
 const customerSessionCache = new Map();
 let boothProductsStore = mockBoothProducts.map((product) => ({ ...product }));
@@ -421,7 +424,11 @@ const toLoginPayload = (customer) => ({
  */
 const assertApiUrl = () => {
   if (!SWAP_API_URL) {
-    throw new Error('EXPO_PUBLIC_SWAP_API_URL is required when EXPO_PUBLIC_SWAP_USE_MOCK is false.');
+    throw new Error('EXPO_PUBLIC_SWAP_API_URL is required in .env when EXPO_PUBLIC_SWAP_USE_MOCK is false.');
+  }
+
+  if (!SWAP_API_VERSION) {
+    throw new Error('EXPO_PUBLIC_SWAP_API_VERSION is required in .env when EXPO_PUBLIC_SWAP_USE_MOCK is false.');
   }
 };
 
@@ -446,11 +453,12 @@ const buildWalletUrl = (path) => `${SWAP_WALLET_API_URL}/${path.replace(/^\//, '
  * @param {boolean} [withVersion=true]
  * @returns {Promise<Record<string, unknown>>}
  */
-const postJson = async (path, body, withVersion = true) => {
+const postJson = async (path, body, withVersion = true, extraHeaders = {}) => {
   const response = await fetch(buildUrl(path, withVersion), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...extraHeaders,
     },
     body: JSON.stringify(body),
   });
@@ -549,6 +557,140 @@ export const loginAsCustomer = async (email) => {
   }
 
   return postJson('yHncKdVLF2/customers/mime/login/email/3BCB2', { email_c: email });
+};
+
+export const loginAppUser = async (email, password, authToken = '') => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const customer = getMockCustomerProfile(email);
+    return {
+      token: customerSuccessData.token,
+      user: {
+        ...customerSuccessData.customer,
+        ...customer,
+        email_c: customer.email,
+      },
+      customer: {
+        ...customerSuccessData.customer,
+        ...customer,
+        email_c: customer.email,
+      },
+      response: {
+        status: true,
+        success: {
+          code: 'CUS-002',
+          message: 'Customer logged in',
+          data: {
+            token: customerSuccessData.token,
+            customer: {
+              ...customerSuccessData.customer,
+              ...customer,
+              email_c: customer.email,
+            },
+          },
+        },
+      },
+    };
+  }
+
+  const response = await postJson(
+    APP_LOGIN_PATH,
+    {
+      email_c: email,
+      password_c: password,
+      tenancy: APP_LOGIN_TENANCY,
+    },
+    true,
+    authToken ? { Authorization: `Bearer ${authToken}` } : {}
+  );
+
+  const session = extractAuthSession(response);
+  if (!session.token) {
+    throw new Error('Login failed: no token received.');
+  }
+
+  return session;
+};
+
+export const registerGuestSession = async () => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const sessionId = `guest-${Date.now()}`;
+    return {
+      token: customerSuccessData.token,
+      guestToken: customerSuccessData.token,
+      sessionId,
+      clientIp: '127.0.0.1',
+      exp: null,
+      stateHash: null,
+      user: null,
+      customer: null,
+      response: {
+        status: true,
+        success: {
+          code: 'GST-001',
+          message: 'Guest session created',
+          data: {
+            guest_token: customerSuccessData.token,
+            session_id: sessionId,
+            client_ip: '127.0.0.1',
+            exp: null,
+            state_hash: null,
+          },
+        },
+      },
+    };
+  }
+
+  const response = await postJson(APP_GUEST_REGISTER_PATH, {});
+  const session = extractGuestSession(response);
+
+  if (!session.token) {
+    throw new Error('Failed to create guest session.');
+  }
+
+  return session;
+};
+
+export const checkCustomerSession = async (token) => {
+  if (!token) {
+    throw new Error('Missing auth token.');
+  }
+
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return {
+      token,
+      user: customerSuccessData.customer,
+      customer: customerSuccessData.customer,
+      response: {
+        status: true,
+        success: {
+          code: 'CUS-002',
+          message: 'Customer logged in',
+          data: {
+            customer: customerSuccessData.customer,
+          },
+        },
+      },
+    };
+  }
+
+  const response = await postJson(
+    'customers/check-session',
+    {},
+    true,
+    {
+      Authorization: `Bearer ${token}`,
+    }
+  );
+
+  if (!response?.status) {
+    const message = response?.error?.message || response?.success?.message || 'Session expired.';
+    throw new Error(message);
+  }
+
+  return extractAuthSession(response, token);
 };
 
 export const getWalletBalances = async (token, email = '') => {
@@ -1114,13 +1256,45 @@ export const getInspectionProducts = async () => {
 };
 
 export const getBoothProducts = async () => {
-  if (SWAP_USE_MOCK) {
+  if (BOOTH_USE_MOCK) {
     await delay();
     return boothProductsStore.map(formatBoothProduct);
   }
 
   const response = await fetchBoothProducts({});
   return response.products;
+};
+
+const extractAuthSession = (response, fallbackToken = '') => {
+  const success = response?.success || {};
+  const data = success?.data || {};
+  const customer = data?.customer || response?.customer || null;
+  const token = data?.token || success?.token || response?.token || fallbackToken || '';
+
+  return {
+    token,
+    user: customer,
+    customer,
+    response,
+  };
+};
+
+const extractGuestSession = (response) => {
+  const success = response?.success || {};
+  const data = success?.data || {};
+  const token = data?.guest_token || '';
+
+  return {
+    token,
+    guestToken: token,
+    sessionId: data?.session_id || '',
+    clientIp: data?.client_ip || '',
+    exp: data?.exp || null,
+    stateHash: data?.state_hash ?? null,
+    user: null,
+    customer: null,
+    response,
+  };
 };
 
 export const getSellerBooths = async ({
@@ -1130,7 +1304,7 @@ export const getSellerBooths = async ({
   page = 1,
   perPage = 50,
 } = {}) => {
-  if (SWAP_USE_MOCK) {
+  if (BOOTH_USE_MOCK) {
     await delay();
     const query = search.trim().toLowerCase();
     const summaries = mockSellerBooths
@@ -1206,7 +1380,7 @@ export const getSellerBooths = async ({
 };
 
 export const getBoothProductsByFilter = async ({ boothId, status, search = '' } = {}) => {
-  if (SWAP_USE_MOCK) {
+  if (BOOTH_USE_MOCK) {
     await delay();
     const query = search.trim().toLowerCase();
     const products = boothProductsStore
@@ -1284,7 +1458,7 @@ export const getBoothProductsByFilter = async ({ boothId, status, search = '' } 
 };
 
 export const getBoothProductById = async (idOrCode) => {
-  if (SWAP_USE_MOCK) {
+  if (BOOTH_USE_MOCK) {
     await delay();
     const productId = extractBoothProductIdFromCode(idOrCode) || idOrCode;
     const product = boothProductsStore.find((entry) => String(entry.id) === String(productId));
@@ -1296,7 +1470,7 @@ export const getBoothProductById = async (idOrCode) => {
 };
 
 export const updateBoothProduct = async (id, updates) => {
-  if (SWAP_USE_MOCK) {
+  if (BOOTH_USE_MOCK) {
     await delay();
     boothProductsStore = boothProductsStore.map((product) => (String(product.id) === String(id) ? { ...product, ...updates } : product));
     const updated = boothProductsStore.find((product) => String(product.id) === String(id));
@@ -1311,7 +1485,7 @@ export const updateBoothProduct = async (id, updates) => {
 };
 
 export const getBoothPaymentMethods = async () => {
-  if (SWAP_USE_MOCK) {
+  if (BOOTH_USE_MOCK) {
     await delay();
     return mockBoothPaymentMethods;
   }
@@ -1320,7 +1494,7 @@ export const getBoothPaymentMethods = async () => {
 };
 
 export const createBoothCheckout = async (checkoutData) => {
-  if (SWAP_USE_MOCK) {
+  if (BOOTH_USE_MOCK) {
     await delay();
     const paymentMethod = mockBoothPaymentMethods.find((method) => method.id === checkoutData.Booth_payment_method) || null;
     const items = (checkoutData.items || [])
@@ -1362,7 +1536,7 @@ export const getAllBoothCheckouts = async ({
   page = 1,
   perPage = 50,
 } = {}) => {
-  if (SWAP_USE_MOCK) {
+  if (BOOTH_USE_MOCK) {
     await delay();
     const filtered = boothCheckoutsStore.filter((checkout) => {
       const timestamp = new Date(checkout.checkout_date).getTime();
@@ -1410,7 +1584,7 @@ export const getAllBoothCheckouts = async ({
 };
 
 export const getBoothCheckout = async (id) => {
-  if (SWAP_USE_MOCK) {
+  if (BOOTH_USE_MOCK) {
     await delay();
     const checkout = boothCheckoutsStore.find((entry) => String(entry.id) === String(id));
     return { checkout: checkout ? formatBoothCheckout(checkout) : null };
@@ -1430,4 +1604,5 @@ export const swapApiConfig = {
   walletUrl: SWAP_WALLET_API_URL,
   version: SWAP_API_VERSION,
   useMock: SWAP_USE_MOCK,
+  boothUseMock: BOOTH_USE_MOCK,
 };

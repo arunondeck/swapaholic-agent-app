@@ -3,7 +3,7 @@ import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { isBoothLiveEnabled } from '../../api/boothGraphqlApi';
 import { getAllBoothCheckouts } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useBoothAuthStore } from '../../store/boothAuthStore';
+import { useAppSessionStore } from '../../store/appSessionStore';
 import { styles } from '../../styles/commonStyles';
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
@@ -25,7 +25,7 @@ const toStartOfDayIso = (value) => (value ? new Date(`${value}T00:00:00`).toISOS
 const toEndOfDayIso = (value) => (value ? new Date(`${value}T23:59:59`).toISOString() : null);
 
 export const BoothAllCheckoutsScreen = ({ pop, push }) => {
-  const token = useBoothAuthStore((state) => state.token);
+  const token = useAppSessionStore((state) => state.token);
   const defaults = useMemo(() => getDefaultDateRange(), []);
   const [pendingStartDate, setPendingStartDate] = useState(defaults.start);
   const [pendingEndDate, setPendingEndDate] = useState(defaults.end);

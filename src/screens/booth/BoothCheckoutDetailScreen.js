@@ -3,11 +3,11 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import { isBoothLiveEnabled } from '../../api/boothGraphqlApi';
 import { getBoothCheckout } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useBoothAuthStore } from '../../store/boothAuthStore';
+import { useAppSessionStore } from '../../store/appSessionStore';
 import { styles } from '../../styles/commonStyles';
 
 export const BoothCheckoutDetailScreen = ({ pop, push, checkoutId }) => {
-  const token = useBoothAuthStore((state) => state.token);
+  const token = useAppSessionStore((state) => state.token);
   const [checkout, setCheckout] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

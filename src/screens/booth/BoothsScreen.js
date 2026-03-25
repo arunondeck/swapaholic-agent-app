@@ -3,7 +3,7 @@ import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { isBoothLiveEnabled } from '../../api/boothGraphqlApi';
 import { getSellerBooths } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useBoothAuthStore } from '../../store/boothAuthStore';
+import { useAppSessionStore } from '../../store/appSessionStore';
 import { styles } from '../../styles/commonStyles';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
@@ -20,7 +20,7 @@ const formatDate = (value) =>
     : 'NA';
 
 export const BoothsScreen = ({ pop, push, focusSearch }) => {
-  const token = useBoothAuthStore((state) => state.token);
+  const token = useAppSessionStore((state) => state.token);
   const [status, setStatus] = useState('pending');
   const [cycle, setCycle] = useState('next');
   const [search, setSearch] = useState('');
