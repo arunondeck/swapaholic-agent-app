@@ -4,6 +4,7 @@ import { LoaderProvider } from './src/context/LoaderContext';
 import { useAppSessionStore } from './src/store/appSessionStore';
 import { ScreenShell } from './src/components/ScreenShell';
 import { styles } from './src/styles/commonStyles';
+import { isBoothLiveEnabled } from './src/api/boothGraphqlApi';
 
 import { HomeScreen } from './src/screens/HomeScreen';
 import { BoothAllCheckoutsScreen } from './src/screens/booth/BoothAllCheckoutsScreen';
@@ -44,7 +45,7 @@ export default function App() {
   const hydrateAppSession = useAppSessionStore((state) => state.hydrate);
   const hydrated = useAppSessionStore((state) => state.hydrated);
   const checkingSession = useAppSessionStore((state) => state.checkingSession);
-  const token = useAppSessionStore((state) => state.token);
+  const sessionType = useAppSessionStore((state) => state.sessionType);
 
   const current = stack[stack.length - 1];
   const push = (route, params = {}) => setStack((prev) => [...prev, { route, params }]);
@@ -138,7 +139,7 @@ export default function App() {
       );
     }
 
-    if (!token) {
+    if (isBoothLiveEnabled() && sessionType !== 'authenticated') {
       return <BoothLoginScreen />;
     }
 

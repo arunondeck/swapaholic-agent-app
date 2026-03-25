@@ -1,23 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
-import { isBoothLiveEnabled } from '../../api/boothGraphqlApi';
+import { Text, View } from 'react-native';
 import { getBoothCheckout } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useAppSessionStore } from '../../store/appSessionStore';
 import { styles } from '../../styles/commonStyles';
 
 export const BoothCheckoutDetailScreen = ({ pop, push, checkoutId }) => {
-  const token = useAppSessionStore((state) => state.token);
   const [checkout, setCheckout] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const requiresLogin = isBoothLiveEnabled() && !token;
 
   useEffect(() => {
-    if (requiresLogin) {
-      return undefined;
-    }
-
     let active = true;
 
     const loadCheckout = async () => {
@@ -47,7 +39,7 @@ export const BoothCheckoutDetailScreen = ({ pop, push, checkoutId }) => {
     return () => {
       active = false;
     };
-  }, [checkoutId, requiresLogin]);
+  }, [checkoutId]);
 
   const totalItems = useMemo(
     () => (checkout?.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
@@ -61,23 +53,13 @@ export const BoothCheckoutDetailScreen = ({ pop, push, checkoutId }) => {
       onBack={pop}
       backgroundColor="#eff6ff"
     >
-      {requiresLogin ? (
-        <View style={styles.formCard}>
-          <Text style={styles.cardTitle}>Sign in required</Text>
-          <Text style={styles.cardSubtitle}>Authenticate with the booth backend before loading live checkout records.</Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={() => push('boothLogin')}>
-            <Text style={styles.primaryButtonText}>Open Booth Login</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
       {loading ? (
         <View style={styles.formCard}>
           <Text style={styles.cardSubtitle}>Loading checkout...</Text>
         </View>
       ) : null}
 
-      {!requiresLogin && !loading && checkout ? (
+      {!loading && checkout ? (
         <>
           <View style={styles.summaryCard}>
             <Text style={styles.summarySubheading}>Summary</Text>
@@ -118,7 +100,7 @@ export const BoothCheckoutDetailScreen = ({ pop, push, checkoutId }) => {
         </>
       ) : null}
 
-      {!requiresLogin && !loading && !checkout ? (
+      {!loading && !checkout ? (
         <View style={styles.formCard}>
           <Text style={[styles.cardTitle, { textAlign: 'center' }]}>Checkout not found</Text>
           <Text style={[styles.helperText, { textAlign: 'center' }]}>This sale record is missing from the current mock store.</Text>

@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { isBoothLiveEnabled } from '../../api/boothGraphqlApi';
 import { getSellerBooths } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useAppSessionStore } from '../../store/appSessionStore';
 import { styles } from '../../styles/commonStyles';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
@@ -20,7 +18,6 @@ const formatDate = (value) =>
     : 'NA';
 
 export const BoothsScreen = ({ pop, push, focusSearch }) => {
-  const token = useAppSessionStore((state) => state.token);
   const [status, setStatus] = useState('pending');
   const [cycle, setCycle] = useState('next');
   const [search, setSearch] = useState('');
@@ -34,7 +31,6 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
   const cycleTabs = useMemo(() => cycleTabsByStatus[status] || ['all'], [status]);
   const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
   const safePage = Math.min(page, totalPages);
-  const requiresLogin = isBoothLiveEnabled() && !token;
 
   useEffect(() => {
     if (!cycleTabs.includes(cycle)) {
@@ -43,10 +39,6 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
   }, [cycle, cycleTabs]);
 
   useEffect(() => {
-    if (requiresLogin) {
-      return undefined;
-    }
-
     let active = true;
 
     const loadBooths = async () => {
@@ -79,7 +71,7 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
     return () => {
       active = false;
     };
-  }, [cycle, perPage, requiresLogin, safePage, search, status]);
+  }, [cycle, perPage, safePage, search, status]);
 
   return (
     <ScreenShell title="Booths" subtitle={error || 'Browse and manage booth approvals'} onBack={pop} backgroundColor="#f1f5f9">
@@ -131,23 +123,13 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
         style={styles.input}
       />
 
-      {requiresLogin ? (
-        <View style={styles.formCard}>
-          <Text style={styles.cardTitle}>Sign in required</Text>
-          <Text style={styles.cardSubtitle}>The live booth backend requires authentication before booth data can be loaded.</Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={() => push('boothLogin')}>
-            <Text style={styles.primaryButtonText}>Open Booth Login</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
       {loading ? (
         <View style={styles.formCard}>
           <Text style={styles.cardSubtitle}>Loading booths...</Text>
         </View>
       ) : null}
 
-      {!requiresLogin && !loading && booths.length > 0
+      {!loading && booths.length > 0
         ? booths.map((booth) => (
             <TouchableOpacity key={booth.id} style={styles.listItem} onPress={() => push('boothDetails', { boothId: booth.id })}>
               <Text style={styles.cardTitle}>{booth.name}</Text>
@@ -167,7 +149,7 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
           ))
         : null}
 
-      {!requiresLogin && !loading && booths.length === 0 ? (
+      {!loading && booths.length === 0 ? (
         <View style={styles.formCard}>
           <Text style={[styles.cardTitle, { textAlign: 'center' }]}>No booths found</Text>
           <Text style={[styles.helperText, { textAlign: 'center' }]}>Adjust your filters or search to widen the results.</Text>

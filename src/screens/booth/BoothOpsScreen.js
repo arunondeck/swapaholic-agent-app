@@ -9,9 +9,10 @@ import { styles } from '../../styles/commonStyles';
 export const BoothOpsScreen = ({ push, pop }) => {
   const token = useAppSessionStore((state) => state.token);
   const user = useAppSessionStore((state) => state.user);
+  const sessionType = useAppSessionStore((state) => state.sessionType);
   const logout = useAppSessionStore((state) => state.logout);
   const liveMode = isBoothLiveEnabled();
-  const isAuthenticated = Boolean(token);
+  const isAuthenticated = Boolean(token) && sessionType === 'authenticated';
 
   return (
     <ScreenShell

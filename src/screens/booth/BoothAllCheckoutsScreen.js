@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { isBoothLiveEnabled } from '../../api/boothGraphqlApi';
 import { getAllBoothCheckouts } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useAppSessionStore } from '../../store/appSessionStore';
 import { styles } from '../../styles/commonStyles';
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
@@ -25,7 +23,6 @@ const toStartOfDayIso = (value) => (value ? new Date(`${value}T00:00:00`).toISOS
 const toEndOfDayIso = (value) => (value ? new Date(`${value}T23:59:59`).toISOString() : null);
 
 export const BoothAllCheckoutsScreen = ({ pop, push }) => {
-  const token = useAppSessionStore((state) => state.token);
   const defaults = useMemo(() => getDefaultDateRange(), []);
   const [pendingStartDate, setPendingStartDate] = useState(defaults.start);
   const [pendingEndDate, setPendingEndDate] = useState(defaults.end);
@@ -38,16 +35,11 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const requiresLogin = isBoothLiveEnabled() && !token;
 
   const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
   const safePage = Math.min(page, totalPages);
 
   useEffect(() => {
-    if (requiresLogin) {
-      return undefined;
-    }
-
     let active = true;
 
     const loadCheckouts = async () => {
@@ -86,7 +78,7 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
     return () => {
       active = false;
     };
-  }, [endDate, perPage, requiresLogin, safePage, startDate]);
+  }, [endDate, perPage, safePage, startDate]);
 
   return (
     <ScreenShell title="All Checkouts" subtitle={error || 'Checkout summary and list'} onBack={pop} backgroundColor="#f8fafc">
@@ -167,30 +159,20 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
         </View>
       </View>
 
-      {requiresLogin ? (
-        <View style={styles.formCard}>
-          <Text style={styles.cardTitle}>Sign in required</Text>
-          <Text style={styles.cardSubtitle}>Authenticate with the booth backend before loading live checkout history.</Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={() => push('boothLogin')}>
-            <Text style={styles.primaryButtonText}>Open Booth Login</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
       {loading ? (
         <View style={styles.formCard}>
           <Text style={styles.cardSubtitle}>Loading checkouts...</Text>
         </View>
       ) : null}
 
-      {!requiresLogin && !loading && checkouts.length === 0 ? (
+      {!loading && checkouts.length === 0 ? (
         <View style={styles.formCard}>
           <Text style={[styles.cardTitle, { textAlign: 'center' }]}>No checkouts found</Text>
           <Text style={[styles.helperText, { textAlign: 'center' }]}>No booth sales match the selected date range.</Text>
         </View>
       ) : null}
 
-      {!requiresLogin && !loading
+      {!loading
         ? checkouts.map((checkout) => {
             const itemCount = (checkout.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
             return (

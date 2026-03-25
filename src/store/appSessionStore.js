@@ -8,6 +8,7 @@ export const useAppSessionStore = create((set, get) => ({
   loading: false,
   token: '',
   user: null,
+  sessionType: 'guest',
   error: '',
   hydrate: async () => {
     if (get().hydrated) {
@@ -17,12 +18,14 @@ export const useAppSessionStore = create((set, get) => ({
     const stored = await loadStoredAppSession();
     const token = stored?.token || '';
     const user = stored?.user || null;
+    const sessionType = stored?.sessionType || 'guest';
 
     set({
       hydrated: true,
       checkingSession: true,
       token,
       user,
+      sessionType,
       error: '',
     });
 
@@ -51,6 +54,7 @@ export const useAppSessionStore = create((set, get) => ({
     set({
       token: auth.token,
       user: null,
+      sessionType: 'guest',
       error: '',
     });
 
@@ -74,6 +78,7 @@ export const useAppSessionStore = create((set, get) => ({
       set({
         token: auth.token,
         user: auth.user,
+        sessionType: auth.sessionType,
         error: '',
       });
 
@@ -83,6 +88,7 @@ export const useAppSessionStore = create((set, get) => ({
       set({
         token: '',
         user: null,
+        sessionType: 'guest',
         error: '',
       });
       return null;
@@ -106,6 +112,7 @@ export const useAppSessionStore = create((set, get) => ({
         loading: false,
         token: auth.token,
         user: auth.user,
+        sessionType: 'authenticated',
         error: '',
       });
 
@@ -124,6 +131,7 @@ export const useAppSessionStore = create((set, get) => ({
     set({
       token: guestAuth.token,
       user: null,
+      sessionType: 'guest',
       error: '',
     });
   },

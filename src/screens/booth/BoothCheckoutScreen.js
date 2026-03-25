@@ -1,16 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { isBoothLiveEnabled } from '../../api/boothGraphqlApi';
 import { createBoothCheckout, getBoothPaymentMethods, getBoothProductById } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useAppSessionStore } from '../../store/appSessionStore';
 import { styles } from '../../styles/commonStyles';
 
 const BARCODE_TYPES = ['qr', 'code128', 'code39', 'code93', 'codabar'];
 
 export const BoothCheckoutScreen = ({ pop, push }) => {
-  const token = useAppSessionStore((state) => state.token);
   const [productCode, setProductCode] = useState('');
   const [cart, setCart] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
@@ -20,13 +17,8 @@ export const BoothCheckoutScreen = ({ pop, push }) => {
   const [scannerReady, setScannerReady] = useState(true);
   const [permission, requestPermission] = useCameraPermissions();
   const lastScannedRef = useRef({ value: '', at: 0 });
-  const requiresLogin = isBoothLiveEnabled() && !token;
 
   useEffect(() => {
-    if (requiresLogin) {
-      return undefined;
-    }
-
     let active = true;
 
     const loadPaymentMethods = async () => {
@@ -48,7 +40,7 @@ export const BoothCheckoutScreen = ({ pop, push }) => {
     return () => {
       active = false;
     };
-  }, [requiresLogin]);
+  }, []);
 
   const subtotal = useMemo(
     () => cart.reduce((sum, item) => sum + Number(item.listing_price || 0) * Number(item.quantity || 0), 0),
@@ -179,19 +171,8 @@ export const BoothCheckoutScreen = ({ pop, push }) => {
 
   return (
     <ScreenShell title="Booth POS" subtitle="Scan or type a booth product code" onBack={pop} backgroundColor="#eff6ff">
-      {requiresLogin ? (
-        <View style={styles.formCard}>
-          <Text style={styles.cardTitle}>Sign in required</Text>
-          <Text style={styles.cardSubtitle}>Authenticate with the booth backend before running live booth checkout.</Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={() => push('boothLogin')}>
-            <Text style={styles.primaryButtonText}>Open Booth Login</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
-      {!requiresLogin ? (
-        <>
-          <View style={[styles.formCard, { backgroundColor: '#1d4ed8', borderColor: '#1d4ed8' }]}>
+      <>
+        <View style={[styles.formCard, { backgroundColor: '#1d4ed8', borderColor: '#1d4ed8' }]}>
             <Text style={[styles.summaryText, { color: '#dbeafe' }]}>Product codes follow the live booth format `MB-booth-seller-product-brand`.</Text>
             <Text style={[styles.selectLabel, { color: '#dbeafe' }]}>Product Code</Text>
             <TextInput
@@ -212,8 +193,8 @@ export const BoothCheckoutScreen = ({ pop, push }) => {
             </View>
           </View>
 
-          {scannerOpen ? (
-            <View style={styles.scannerCard}>
+        {scannerOpen ? (
+          <View style={styles.scannerCard}>
               <Text style={styles.cardTitle}>Barcode Scanner</Text>
               <Text style={styles.helperText}>Point the camera at a booth QR or barcode.</Text>
               <View style={styles.cameraFrame}>
@@ -227,10 +208,10 @@ export const BoothCheckoutScreen = ({ pop, push }) => {
               <TouchableOpacity style={styles.secondaryButton} onPress={() => setScannerOpen(false)}>
                 <Text style={styles.secondaryButtonText}>Close Scanner</Text>
               </TouchableOpacity>
-            </View>
-          ) : null}
+          </View>
+        ) : null}
 
-          <View style={styles.summaryCard}>
+        <View style={styles.summaryCard}>
             <Text style={styles.summaryHeading}>Cart Summary</Text>
 
             {cart.length === 0 ? (
@@ -283,9 +264,8 @@ export const BoothCheckoutScreen = ({ pop, push }) => {
                 </TouchableOpacity>
               </>
             )}
-          </View>
-        </>
-      ) : null}
+        </View>
+      </>
     </ScreenShell>
   );
 };

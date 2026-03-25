@@ -28,7 +28,9 @@ export const BoothLoginScreen = ({ pop }) => {
     try {
       setError('');
       await login(email.trim(), password);
-      pop();
+      if (typeof pop === 'function') {
+        pop();
+      }
     } catch (loginError) {
       setError(loginError.message || 'Network error. Please try again.');
     }
