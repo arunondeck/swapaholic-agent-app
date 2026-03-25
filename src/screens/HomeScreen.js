@@ -55,7 +55,7 @@ export const HomeScreen = ({ push, mode, setMode }) => {
 
       {activeMode === 'ops' ? (
         <>
-          <OpsSummary />
+          <OpsSummary headerVariant="plain" />
           <Card title="Sales Reports" subtitle="Daily and range-based sales reports" onPress={() => push('opsSalesReports')} />
           <Card title="Products List" subtitle="UI placeholder" onPress={() => push('opsProducts')} />
           <Card title="Customer List" subtitle="UI placeholder" onPress={() => push('opsCustomers')} />
