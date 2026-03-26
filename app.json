@@ -13,6 +13,12 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "updates": {
+      "url": "https://u.expo.dev/8c8bda28-8e68-45a5-8bd1-ada75f2d0241"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "android": {
       "package": "com.swapaholic.swapsquad",
       "adaptiveIcon": {

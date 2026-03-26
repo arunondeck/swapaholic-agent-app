@@ -4,3 +4,4 @@
 /.codex-run
 /dist
 .env.local
+android/
