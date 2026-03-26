@@ -35,6 +35,7 @@ import {
   mutateBooth,
   mutateBoothProduct,
 } from './boothGraphqlApi';
+import { getCachedStoredAppSession, getStoredShopToken } from '../store/appSessionStorage';
 import { buildBoothProductCode, extractBoothProductIdFromCode } from '../utils/boothProductCode';
 
 /**
@@ -446,6 +447,15 @@ const buildUrl = (path, withVersion = true) => {
 
 const buildWalletUrl = (path) => `${SWAP_WALLET_API_URL}/${path.replace(/^\//, '')}`;
 
+const withSwapAuthHeader = async (headers = {}) => {
+  if (headers.Authorization) {
+    return headers;
+  }
+
+  const token = getCachedStoredAppSession()?.shopToken || (await getStoredShopToken());
+  return token ? { ...headers, Authorization: `Bearer ${token}` } : headers;
+};
+
 /**
  * Sends a POST request with JSON payload.
  * @param {string} path
@@ -454,12 +464,14 @@ const buildWalletUrl = (path) => `${SWAP_WALLET_API_URL}/${path.replace(/^\//, '
  * @returns {Promise<Record<string, unknown>>}
  */
 const postJson = async (path, body, withVersion = true, extraHeaders = {}) => {
+  const headers = await withSwapAuthHeader({
+    'Content-Type': 'application/json',
+    ...extraHeaders,
+  });
+
   const response = await fetch(buildUrl(path, withVersion), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...extraHeaders,
-    },
+    headers,
     body: JSON.stringify(body),
   });
 
@@ -472,9 +484,10 @@ const postJson = async (path, body, withVersion = true, extraHeaders = {}) => {
 };
 
 const getJson = async (url, headers = {}) => {
+  const requestHeaders = await withSwapAuthHeader(headers);
   const response = await fetch(url, {
     method: 'GET',
-    headers,
+    headers: requestHeaders,
   });
 
   if (!response.ok) {
@@ -493,8 +506,10 @@ const getJson = async (url, headers = {}) => {
  * @returns {Promise<Record<string, unknown>>}
  */
 const postFormData = async (path, formData, withVersion = true) => {
+  const headers = await withSwapAuthHeader();
   const response = await fetch(buildUrl(path, withVersion), {
     method: 'POST',
+    headers,
     body: formData,
   });
 

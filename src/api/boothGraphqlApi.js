@@ -1,32 +1,8 @@
 import { buildBoothProductCode } from '../utils/boothProductCode';
-import { getCachedStoredAppSession, getStoredAppToken } from '../store/appSessionStorage';
+import { getCachedStoredAppSession, getStoredBoothToken } from '../store/appSessionStorage';
 
 const BOOTH_GRAPHQL_URL = process.env.EXPO_PUBLIC_BOOTH_GRAPHQL_URL || '';
 const BOOTH_USE_MOCK = (process.env.EXPO_PUBLIC_BOOTH_USE_MOCK || process.env.EXPO_PUBLIC_SWAP_USE_MOCK || 'true').toLowerCase() === 'true';
-
-const LOGIN_MUTATION = `
-mutation Login($input: UsersPermissionsLoginRegisterInput!) {
-  mktRegisterLogin(input: $input) {
-    user {
-      id
-      username
-      email
-      confirmed
-      blocked
-      user {
-        id
-        username
-        email
-        confirmed
-        blocked
-        seller_enabled
-        first_name
-        last_name
-      }
-    }
-    token
-  }
-}`;
 
 const SELLER_BOOTH_LIST_FRAGMENT = `
 fragment SellerBoothList on SellerBooth {
@@ -287,9 +263,9 @@ const requestBoothGraphql = async (query, variables = {}, { requiresAuth = true 
   };
 
   if (requiresAuth) {
-    const token = getCachedStoredAppSession()?.token || (await getStoredAppToken());
+    const token = getCachedStoredAppSession()?.boothToken || (await getStoredBoothToken());
     if (!token) {
-      throw new Error('Booth sign-in required.');
+      throw new Error('Booth token not available.');
     }
 
     headers.Authorization = `Bearer ${token}`;
@@ -320,31 +296,6 @@ export const boothGraphqlConfig = {
 };
 
 export const isBoothLiveEnabled = () => !BOOTH_USE_MOCK;
-
-export const boothLogin = async (email, password) => {
-  const data = await requestBoothGraphql(
-    LOGIN_MUTATION,
-    {
-      input: {
-        email,
-        password,
-        provider: 'local',
-        type: 'login',
-      },
-    },
-    { requiresAuth: false }
-  );
-
-  const result = data?.mktRegisterLogin;
-  if (!result?.token) {
-    throw new Error('Login failed: no token received.');
-  }
-
-  return {
-    token: result.token,
-    user: result.user?.user || result.user || null,
-  };
-};
 
 export const fetchSellerBooths = async ({ where = {}, start = 0, limit = 50 } = {}) => {
   const data = await requestBoothGraphql(GET_SELLER_BOOTHS_QUERY, { where, start, limit });

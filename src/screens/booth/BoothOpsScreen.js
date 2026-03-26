@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { isBoothLiveEnabled } from '../../api/boothGraphqlApi';
 import { Card } from '../../components/Card';
 import { ScreenShell } from '../../components/ScreenShell';
@@ -7,36 +7,25 @@ import { useAppSessionStore } from '../../store/appSessionStore';
 import { styles } from '../../styles/commonStyles';
 
 export const BoothOpsScreen = ({ push, pop }) => {
-  const token = useAppSessionStore((state) => state.token);
-  const user = useAppSessionStore((state) => state.user);
-  const sessionType = useAppSessionStore((state) => state.sessionType);
-  const logout = useAppSessionStore((state) => state.logout);
+  const boothToken = useAppSessionStore((state) => state.boothToken);
   const liveMode = isBoothLiveEnabled();
-  const isAuthenticated = Boolean(token) && sessionType === 'authenticated';
+  const hasBoothToken = Boolean(boothToken);
 
   return (
     <ScreenShell
       title="Swapaholic Booth"
-      subtitle={liveMode ? (isAuthenticated ? 'Live backend connected' : 'Live backend requires sign-in') : 'Mock booth workspace'}
+      subtitle={liveMode ? (hasBoothToken ? 'Live backend connected' : 'Booth token unavailable') : 'Mock booth workspace'}
       onBack={pop}
       backgroundColor="#eef2ff"
     >
       {liveMode ? (
         <View style={styles.formCard}>
-          <Text style={styles.cardTitle}>{isAuthenticated ? 'Booth Backend Connected' : 'Booth Backend Sign-In Required'}</Text>
+          <Text style={styles.cardTitle}>{hasBoothToken ? 'Booth Backend Connected' : 'Booth Backend Token Missing'}</Text>
           <Text style={styles.cardSubtitle}>
-            {isAuthenticated ? user?.email || user?.username || 'Authenticated booth user' : 'Sign in before using live booth data, checkout, scanning, and print.'}
+            {hasBoothToken
+              ? 'Booth APIs are using the stored booth bearer token.'
+              : 'Set EXPO_PUBLIC_BOOTH_EMAIL and let the app refresh the booth token on launch.'}
           </Text>
-          <View style={styles.row}>
-            <TouchableOpacity style={[styles.primaryButton, { flex: 1 }]} onPress={() => push('boothLogin')}>
-              <Text style={styles.primaryButtonText}>{isAuthenticated ? 'Switch Account' : 'Sign In'}</Text>
-            </TouchableOpacity>
-            {isAuthenticated ? (
-              <TouchableOpacity style={[styles.secondaryButton, { flex: 1 }]} onPress={logout}>
-                <Text style={styles.secondaryButtonText}>Log Out</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
         </View>
       ) : null}
 

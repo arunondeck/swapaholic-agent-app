@@ -536,4 +536,38 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  splashScreen: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  splashContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  splashLogo: {
+    width: 124,
+    height: 124,
+    marginBottom: 20,
+  },
+  splashAppName: {
+    fontSize: 30,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+  splashVersion: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+  },
+  splashLoadingText: {
+    marginTop: 28,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#334155',
+    textAlign: 'center',
+  },
 });

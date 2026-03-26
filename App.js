@@ -1,22 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BackHandler, Text, View } from 'react-native';
+import { BackHandler, Image, SafeAreaView, StatusBar, Text, View } from 'react-native';
+import appConfig from './app.json';
 import { LoaderProvider } from './src/context/LoaderContext';
-import { useAppSessionStore } from './src/store/appSessionStore';
 import { ScreenShell } from './src/components/ScreenShell';
-import { styles } from './src/styles/commonStyles';
-import { isBoothLiveEnabled } from './src/api/boothGraphqlApi';
-
 import { HomeScreen } from './src/screens/HomeScreen';
 import { BoothAllCheckoutsScreen } from './src/screens/booth/BoothAllCheckoutsScreen';
 import { BoothApplicationsScreen } from './src/screens/booth/BoothApplicationsScreen';
-import { BoothCheckoutScreen } from './src/screens/booth/BoothCheckoutScreen';
 import { BoothCheckoutDetailScreen } from './src/screens/booth/BoothCheckoutDetailScreen';
+import { BoothCheckoutScreen } from './src/screens/booth/BoothCheckoutScreen';
 import { BoothDetailsScreen } from './src/screens/booth/BoothDetailsScreen';
-import { BoothLoginScreen } from './src/screens/booth/BoothLoginScreen';
-import { BoothsScreen } from './src/screens/booth/BoothsScreen';
 import { BoothOpsScreen } from './src/screens/booth/BoothOpsScreen';
 import { BoothReviewScreen } from './src/screens/booth/BoothReviewScreen';
 import { BoothTagsScreen } from './src/screens/booth/BoothTagsScreen';
+import { BoothsScreen } from './src/screens/booth/BoothsScreen';
 import { OpsCustomersScreen } from './src/screens/ops/OpsCustomersScreen';
 import { OpsModeScreen } from './src/screens/ops/OpsModeScreen';
 import { OpsProductsScreen } from './src/screens/ops/OpsProductsScreen';
@@ -39,13 +35,20 @@ import { PickupCardsScreen } from './src/screens/swap/PickupCardsScreen';
 import { SwapModeScreen } from './src/screens/swap/SwapModeScreen';
 import { SwapPlansScreen } from './src/screens/swap/SwapPlansScreen';
 import { SwapTagsScreen } from './src/screens/swap/SwapTagsScreen';
+import { useAppSessionStore } from './src/store/appSessionStore';
+import { styles } from './src/styles/commonStyles';
+
+const SPLASH_MIN_DURATION_MS = 2000;
+const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || appConfig.expo?.name || 'Swapaholic';
+const APP_VERSION = appConfig.expo?.version || '0.0.1';
+const APP_LOGO = require('./src/images/app-icon.png');
 
 export default function App() {
   const [stack, setStack] = useState([{ route: 'home', params: { mode: 'swap' } }]);
+  const [minSplashElapsed, setMinSplashElapsed] = useState(false);
   const hydrateAppSession = useAppSessionStore((state) => state.hydrate);
   const hydrated = useAppSessionStore((state) => state.hydrated);
   const checkingSession = useAppSessionStore((state) => state.checkingSession);
-  const sessionType = useAppSessionStore((state) => state.sessionType);
 
   const current = stack[stack.length - 1];
   const push = (route, params = {}) => setStack((prev) => [...prev, { route, params }]);
@@ -58,6 +61,14 @@ export default function App() {
   useEffect(() => {
     hydrateAppSession();
   }, [hydrateAppSession]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMinSplashElapsed(true);
+    }, SPLASH_MIN_DURATION_MS);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -76,7 +87,6 @@ export default function App() {
     () => ({
       home: (params) => <HomeScreen push={push} mode={params?.mode || 'swap'} setMode={(mode) => updateCurrentParams({ mode })} />,
       booth: () => <BoothOpsScreen push={push} pop={pop} />,
-      boothLogin: () => <BoothLoginScreen pop={pop} />,
       booths: (params) => <BoothsScreen push={push} pop={pop} focusSearch={params?.focusSearch} />,
       boothDetails: (params) => <BoothDetailsScreen push={push} pop={pop} boothId={params?.boothId} />,
       boothAllCheckouts: () => <BoothAllCheckoutsScreen pop={pop} push={push} />,
@@ -128,19 +138,18 @@ export default function App() {
   );
 
   const renderCurrentScreen = () => {
-    if (!hydrated || checkingSession) {
+    if (!minSplashElapsed || !hydrated || checkingSession) {
       return (
-        <ScreenShell title="Swapaholic" subtitle="Checking session..." backgroundColor="#f8fafc">
-          <View style={styles.formCard}>
-            <Text style={styles.cardTitle}>Loading session</Text>
-            <Text style={styles.cardSubtitle}>Validating the saved token before opening the app.</Text>
+        <SafeAreaView style={styles.splashScreen}>
+          <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+          <View style={styles.splashContent}>
+            <Image source={APP_LOGO} style={styles.splashLogo} resizeMode="contain" />
+            <Text style={styles.splashAppName}>{APP_NAME}</Text>
+            <Text style={styles.splashVersion}>Version {APP_VERSION}</Text>
+            <Text style={styles.splashLoadingText}>Loading...</Text>
           </View>
-        </ScreenShell>
+        </SafeAreaView>
       );
-    }
-
-    if (isBoothLiveEnabled() && sessionType !== 'authenticated') {
-      return <BoothLoginScreen />;
     }
 
     return screens[current.route]?.(current.params) || null;

@@ -1,14 +1,42 @@
 import { create } from 'zustand';
-import { checkCustomerSession, loginAppUser, registerGuestSession } from '../api/swapOpsApi';
+import { checkCustomerSession, loginAsCustomer } from '../api/swapOpsApi';
 import { clearStoredAppSession, loadStoredAppSession, saveStoredAppSession } from './appSessionStorage';
+
+const SHOP_EMAIL = (process.env.EXPO_PUBLIC_SWAP_EMAIL || '').trim().toLowerCase();
+const BOOTH_EMAIL = (process.env.EXPO_PUBLIC_BOOTH_EMAIL || '').trim().toLowerCase();
+
+const resolveTokenForEmail = async (storedToken, email) => {
+  if (!email) {
+    throw new Error('Missing auth email configuration.');
+  }
+
+  if (storedToken) {
+    try {
+      const session = await checkCustomerSession(storedToken);
+      if (session?.token) {
+        return session.token;
+      }
+    } catch (error) {
+      // Refresh the token with mime login when the saved token is invalid.
+    }
+  }
+
+  const loginResponse = await loginAsCustomer(email);
+  const token = loginResponse?.token || '';
+
+  if (!token) {
+    throw new Error(`Failed to get token for ${email}.`);
+  }
+
+  return token;
+};
 
 export const useAppSessionStore = create((set, get) => ({
   hydrated: false,
   checkingSession: false,
   loading: false,
-  token: '',
-  user: null,
-  sessionType: 'guest',
+  shopToken: '',
+  boothToken: '',
   error: '',
   hydrate: async () => {
     if (get().hydrated) {
@@ -16,69 +44,43 @@ export const useAppSessionStore = create((set, get) => ({
     }
 
     const stored = await loadStoredAppSession();
-    const token = stored?.token || '';
-    const user = stored?.user || null;
-    const sessionType = stored?.sessionType || 'guest';
 
     set({
       hydrated: true,
       checkingSession: true,
-      token,
-      user,
-      sessionType,
+      shopToken: stored?.shopToken || '',
+      boothToken: stored?.boothToken || '',
       error: '',
     });
 
     try {
-      if (!token) {
-        await get().ensureGuestSession();
-      } else {
-        const session = await get().validateSession(token);
-        if (!session) {
-          await get().ensureGuestSession();
-        }
-      }
+      await get().refreshTokens();
+    } catch (error) {
+      set({
+        loading: false,
+        error: error?.message || 'Unable to initialize app tokens.',
+      });
     } finally {
       set({ checkingSession: false });
     }
   },
-  ensureGuestSession: async () => {
-    const session = await registerGuestSession();
-    const auth = {
-      token: session?.token || '',
-      user: null,
-      sessionType: 'guest',
-    };
-
-    await saveStoredAppSession(auth);
-    set({
-      token: auth.token,
-      user: null,
-      sessionType: 'guest',
-      error: '',
-    });
-
-    return auth;
-  },
-  validateSession: async (tokenOverride) => {
-    const token = tokenOverride || get().token;
-    if (!token) {
-      return null;
-    }
+  refreshTokens: async () => {
+    set({ loading: true, error: '' });
 
     try {
-      const session = await checkCustomerSession(token);
-      const auth = {
-        token: session?.token || token,
-        user: session?.user || session?.customer || get().user || null,
-        sessionType: session?.user || session?.customer ? 'authenticated' : 'guest',
-      };
+      const [shopToken, boothToken] = await Promise.all([
+        resolveTokenForEmail(get().shopToken, SHOP_EMAIL),
+        resolveTokenForEmail(get().boothToken, BOOTH_EMAIL),
+      ]);
 
+      const auth = { shopToken, boothToken };
       await saveStoredAppSession(auth);
+
       set({
-        token: auth.token,
-        user: auth.user,
-        sessionType: auth.sessionType,
+        hydrated: true,
+        loading: false,
+        shopToken,
+        boothToken,
         error: '',
       });
 
@@ -86,52 +88,19 @@ export const useAppSessionStore = create((set, get) => ({
     } catch (error) {
       await clearStoredAppSession();
       set({
-        token: '',
-        user: null,
-        sessionType: 'guest',
-        error: '',
-      });
-      return null;
-    }
-  },
-  login: async (email, password) => {
-    set({ loading: true, error: '' });
-
-    try {
-      const bearerToken = get().token;
-      const result = await loginAppUser(email, password, bearerToken);
-      const auth = {
-        token: result?.token || '',
-        user: result?.user || result?.customer || null,
-        sessionType: 'authenticated',
-      };
-
-      await saveStoredAppSession(auth);
-      set({
-        hydrated: true,
         loading: false,
-        token: auth.token,
-        user: auth.user,
-        sessionType: 'authenticated',
-        error: '',
-      });
-
-      return auth;
-    } catch (error) {
-      set({
-        loading: false,
-        error: error?.message || 'Unable to sign in to the app backend.',
+        shopToken: '',
+        boothToken: '',
+        error: error?.message || 'Unable to refresh app tokens.',
       });
       throw error;
     }
   },
-  logout: async () => {
+  clearTokens: async () => {
     await clearStoredAppSession();
-    const guestAuth = await get().ensureGuestSession();
     set({
-      token: guestAuth.token,
-      user: null,
-      sessionType: 'guest',
+      shopToken: '',
+      boothToken: '',
       error: '',
     });
   },
