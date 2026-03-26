@@ -1292,6 +1292,38 @@ export const getCustomerUnreviewedItems = async ({ maxResults = 21, offset = 0, 
 };
 
 /**
+ * Review a customer item in swap flow.
+ * Endpoint: POST /v4/customer-items/review/item
+ * @param {import('../types/swapTypes').SwapReviewItemRequest} params
+ * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<import('../types/swapTypes').SwapProduct> | Record<string, unknown>>}
+ */
+export const reviewCustomerItem = async ({ id, status_c }) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+
+    const product = mockSwapProducts.find((item) => String(item.id) === String(id));
+
+    if (!product) {
+      return createSwapErrorResponse('CIT-404', 'Customer item not found');
+    }
+
+    product.status_c = status_c;
+    product.sub_status_c = status_c === 'approved' ? 'published' : status_c;
+
+    return createSwapSuccessResponse('CIT-200', 'Customer item reviewed', product);
+  }
+
+  return postJson(
+    'v4/customer-items/review/item',
+    {
+      id,
+      status_c,
+    },
+    false
+  );
+};
+
+/**
  * Add item to customer pickup.
  * Endpoint: POST /v3/users/customer-items/init
  * @param {import('../types/swapTypes').SwapAddItemRequest} params

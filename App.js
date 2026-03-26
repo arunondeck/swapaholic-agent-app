@@ -99,7 +99,7 @@ export default function App() {
       swapPlans: () => <SwapPlansScreen pop={pop} />,
       pickupCards: () => <PickupCardsScreen pop={pop} />,
       inspection: () => <InspectionScreen pop={pop} />,
-      approval: () => <ApprovalScreen pop={pop} />,
+      approval: (params) => <ApprovalScreen pop={pop} customerEmail={params?.email} />,
       swapTags: () => <SwapTagsScreen pop={pop} />,
       checkout: (params) => <CheckoutScreen pop={pop} customerEmail={params?.email} />,
       customerPortal: () => <CustomerPortalScreen push={push} pop={pop} />,

@@ -243,6 +243,10 @@
  */
 
 /**
+ * @typedef {{ id: string, status_c: 'approved' | 'callback' | 'donate' }} SwapReviewItemRequest
+ */
+
+/**
  * @typedef {{ pickupId: string, thumbnailFile: Blob | { uri: string, name?: string, type?: string } }} SwapAddItemRequest
  */
 
