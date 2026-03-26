@@ -111,6 +111,55 @@ When `EXPO_PUBLIC_SWAP_USE_MOCK=true`, all supported API methods return local mo
   - `pickup_id_c`
   - `thumbnail_c`
 
+### 8) Create swap order
+- Function: `createSwapOrder(orderData)`
+- Endpoint: `POST /{api_ver}/orders/init`
+- Body:
+```json
+{
+  "subscribe_id_c": "<subscription-id>",
+  "customer_address_id_c": "",
+  "items": [
+    {
+      "id": "<customer-item-id>",
+      "evaluated_points_c": "4"
+    }
+  ],
+  "customer_address": "."
+}
+```
+- Response envelope:
+```json
+{
+  "status": true,
+  "success": {
+    "code": "ORD-201",
+    "message": "Order created",
+    "data": {
+      "order": {},
+      "state_hash": null
+    }
+  },
+  "error": null,
+  "status_code": 200
+}
+```
+- Error envelope:
+```json
+{
+  "status": false,
+  "success": null,
+  "error": {
+    "code": "ORD-009",
+    "message": "Something went wrong",
+    "data": {
+      "state_hash": null
+    }
+  },
+  "status_code": 200
+}
+```
+
 ---
 
 ## Notes

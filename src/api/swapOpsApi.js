@@ -39,55 +39,6 @@ import { getCachedStoredAppSession, getStoredShopToken } from '../store/appSessi
 import { buildBoothProductCode, extractBoothProductIdFromCode } from '../utils/boothProductCode';
 
 /**
- * @typedef {import('../data/mockData').SwapCustomer} SwapCustomer
- */
-
-/**
- * @typedef {{ token: string, customer: SwapCustomer, state_hash: null }} SwapLoginResponse
- */
-
-/**
- * @typedef {{ id: string, status: string, date: string, itemCount: string, total: string }} SwapOrder
- */
-
-/**
- * @typedef {{ id: string, subscriptionId: string, date: string, address: string, totalItems: number, remainingItems: number, items: Array<Record<string, string>> }} SwapPickup
- */
-
-/**
- * @typedef {{ id: string, plan: string, status: string, startDate: string, renewalDate: string, itemsRemaining: number, items: Array<Record<string, string>> }} SwapSubscription
- */
-
-/**
- * @typedef {{ id: string, productId: string, action: 'approve' | 'reject', status: string, reviewedBy: string, reviewedAt: string, notes: string }} SwapReviewResponse
- */
-
-/**
- * @typedef {'SWAP.SUB.TYPE.ITEMS.STORE' | 'SWAP.SUB.TYPE.POINTS.SHOP' | 'SWAP.SUB.TYPE.CONVERSIONS.SHOP'} SwapSubscriptionTenancy
- */
-
-/**
- * @typedef {{ customerId: string, subscribeType?: 'shop' | 'store' | 'event', ignoreNonPickupSubscribe?: boolean }} SwapSubscribesRequest
- */
-
-/**
- * @typedef {{ pickupId: string, maxResults?: number, offset?: number, filters?: Array<Record<string, unknown>> }} SwapPickupItemsRequest
- */
-
-/**
- * @typedef {{ maxResults?: number, offset?: number, filters?: Array<Record<string, unknown>> }} SwapUnreviewedItemsRequest
- */
-
-/**
- * @typedef {{ pickupId: string, thumbnailFile: Blob | { uri: string, name?: string, type?: string } }} SwapAddItemRequest
- */
-
-/**
- * API response envelope.
- * @typedef {{ status: boolean, success: Record<string, unknown>, error: unknown, status_code: number }} SwapApiEnvelope
- */
-
-/**
  * Creates an async delay used by mock-mode endpoints.
  * @param {number} [ms=150]
  * @returns {Promise<void>}
@@ -102,6 +53,7 @@ const BOOTH_USE_MOCK = (process.env.EXPO_PUBLIC_BOOTH_USE_MOCK || process.env.EX
 const APP_LOGIN_PATH = 'guests/customers/get-started';
 const APP_GUEST_REGISTER_PATH = 'guests/register';
 const APP_LOGIN_TENANCY = 'SWAP.AUTH.TYPE.EMAIL';
+const SWAP_ORDER_CREATE_PATH = 'orders/init';
 const EMPTY_ARRAY = [];
 const customerSessionCache = new Map();
 let boothProductsStore = mockBoothProducts.map((product) => ({ ...product }));
@@ -109,8 +61,11 @@ let boothCheckoutsStore = mockBoothCheckouts.map((checkout) => ({
   ...checkout,
   items: (checkout.items || []).map((item) => ({ ...item })),
 }));
+let customerOrdersStore = customerOrders.map((order) => ({ ...order }));
 
 const getResponseData = (response) => response?.success?.data || {};
+
+const getResponseError = (response) => response?.error || null;
 
 const toCurrencyLabel = (value) => `$${Number(value || 0).toFixed(2)}`;
 
@@ -401,7 +356,7 @@ const mapMockCustomerToDetailResponse = (customer) => ({
 /**
  * Maps local customer profile data to the login response payload shape.
  * @param {ReturnType<typeof getMockCustomerProfile>} customer
- * @returns {SwapLoginResponse}
+ * @returns {import('../types/swapTypes').SwapLoginResponse}
  */
 const toLoginPayload = (customer) => ({
   token: customerSuccessData.token,
@@ -499,6 +454,55 @@ const getJson = async (url, headers = {}) => {
 };
 
 /**
+ * @template T
+ * @param {string} code
+ * @param {string} message
+ * @param {T} data
+ * @returns {import('../types/swapTypes').SwapApiEnvelope<T>}
+ */
+const createSwapSuccessResponse = (code, message, data) => ({
+  status: true,
+  success: {
+    code,
+    message,
+    data,
+  },
+  error: null,
+  status_code: 200,
+});
+
+/**
+ * @param {string} code
+ * @param {string} message
+ * @param {Record<string, unknown> | null} [data]
+ * @returns {import('../types/swapTypes').SwapApiEnvelope<null>}
+ */
+const createSwapErrorResponse = (code, message, data = { state_hash: null }) => ({
+  status: false,
+  success: null,
+  error: {
+    code,
+    message,
+    data,
+  },
+  status_code: 200,
+});
+
+/**
+ * @template T
+ * @param {import('../types/swapTypes').SwapApiEnvelope<T> | Record<string, unknown>} response
+ * @returns {T}
+ */
+const assertSwapSuccess = (response) => {
+  if (response?.status === false) {
+    const error = getResponseError(response);
+    throw new Error(error?.message || 'Something went wrong');
+  }
+
+  return getResponseData(response);
+};
+
+/**
  * Sends a POST request with multipart/form-data payload.
  * @param {string} path
  * @param {FormData} formData
@@ -523,8 +527,8 @@ const postFormData = async (path, formData, withVersion = true) => {
 
 /**
  * Creates mock response for subscriptions list endpoint.
- * @param {SwapSubscriptionTenancy} tenancy
- * @returns {SwapApiEnvelope}
+ * @param {import('../types/swapTypes').SwapSubscriptionTenancy} tenancy
+ * @returns {import('../types/swapTypes').SwapApiEnvelope<Record<string, unknown>>}
  */
 const toMockSubscriptionListResponse = (tenancy) => ({
   status: true,
@@ -552,7 +556,7 @@ const toMockSubscriptionListResponse = (tenancy) => ({
 /**
  * Creates mock response for customer details endpoint.
  * @param {string} [customerId=customerSuccessData.customer.id]
- * @returns {SwapApiEnvelope}
+ * @returns {import('../types/swapTypes').SwapApiEnvelope<Record<string, unknown>>}
  */
 const toMockCustomerDetailResponse = (email = '') => mapMockCustomerToDetailResponse(getMockCustomerProfile(email));
 
@@ -562,7 +566,7 @@ const toMockCustomerDetailResponse = (email = '') => mapMockCustomerToDetailResp
  * Request: { email_c: string }
  * Returns a token and customer profile. In mock mode this maps to local customer data.
  * @param {string} email
- * @returns {Promise<SwapLoginResponse | Record<string, unknown>>}
+ * @returns {Promise<import('../types/swapTypes').SwapLoginResponse | Record<string, unknown>>}
  */
 export const loginAsCustomer = async (email) => {
   if (SWAP_USE_MOCK) {
@@ -780,21 +784,160 @@ export const authenticateCustomer = async (email) => {
 /**
  * Get customer orders.
  * @param {string} email
- * @returns {Promise<SwapOrder[]>}
+ * @returns {Promise<import('../types/swapTypes').SwapCustomerOrder[]>}
  */
 export const getCustomerOrders = async (email) => {
   if (SWAP_USE_MOCK) {
     await delay();
-    return getMockCustomerProfile(email).orders || customerOrders;
+    const profileOrders = getMockCustomerProfile(email).orders;
+    if (Array.isArray(profileOrders) && profileOrders.length > 0) {
+      return [...customerOrdersStore.filter((order) => !profileOrders.some((profileOrder) => profileOrder.id === order.id)), ...profileOrders];
+    }
+    return customerOrdersStore;
   }
 
   return EMPTY_ARRAY;
 };
 
 /**
+ * Create a swap order.
+ * Endpoint: POST /{api_ver}/orders/init
+ * @param {import('../types/swapTypes').SwapOrderCreateRequest} orderData
+ * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<import('../types/swapTypes').SwapOrderCreateResponseData>>}
+ */
+export const createSwapOrder = async (orderData) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+
+    if (!orderData?.subscribe_id_c) {
+      return createSwapErrorResponse('ORD-009', 'Missing subscribe id');
+    }
+
+    if (!Array.isArray(orderData?.items) || orderData.items.length === 0) {
+      return createSwapErrorResponse('ORD-009', 'Add at least one order item');
+    }
+
+    const lineItems = orderData.items
+      .map((entry) => mockSwapProducts.find((product) => String(product.id) === String(entry.id)))
+      .filter(Boolean);
+
+    if (lineItems.length !== orderData.items.length) {
+      return createSwapErrorResponse('ORD-009', 'One or more order items could not be found');
+    }
+
+    const totalPoints = orderData.items.reduce((sum, item) => {
+      const value = Number.parseInt(String(item?.evaluated_points_c || '0').replace(/[^\d-]/g, ''), 10);
+      return sum + (Number.isNaN(value) ? 0 : value);
+    }, 0);
+
+    const itemCount = orderData.items.length;
+    const primaryCustomer = lineItems[0]?.customer || customerSuccessData.customer;
+    const createdOrder = {
+      id: `swap-order-${Date.now()}`,
+      name: `Order-${primaryCustomer?.name || 'Customer'}`,
+      unique_id_c: `ORDER-${Math.floor(Date.now() / 1000)}-${customerOrdersStore.length + 1}`,
+      type_c: 'shop',
+      order_cost_c: totalPoints.toFixed(6),
+      total_items_c: String(itemCount),
+      order_date_c: new Date().toISOString().slice(0, 10),
+      status_c: 'received',
+      sub_status_c: '',
+      tracking_id_c: '',
+      escalate_reason_c: '',
+      customer: {
+        ...customerSuccessData.customer,
+        ...primaryCustomer,
+      },
+      order_line_items: lineItems.map((product, index) => ({
+        ...product,
+        evaluated_points_c: orderData.items[index]?.evaluated_points_c || product.evaluated_points_c,
+      })),
+    };
+
+    const order = {
+      id: `ORD-${8128 + customerOrdersStore.length}`,
+      status: 'Placed',
+      date: new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date()),
+      itemCount: `${itemCount} item${itemCount === 1 ? '' : 's'}`,
+      total: `${totalPoints} pts`,
+      email: createdOrder.customer?.email_c || '',
+    };
+
+    customerOrdersStore = [order, ...customerOrdersStore];
+    return createSwapSuccessResponse('ORD-201', 'Order created', {
+      order: createdOrder,
+      state_hash: null,
+    });
+  }
+
+  return postJson(SWAP_ORDER_CREATE_PATH, orderData);
+};
+
+/**
+ * Places a customer order for the swap checkout flow.
+ * @param {{ email: string, items: Array<{ id?: string, name?: string, sku?: string, points?: string | number }>, paymentMethod: 'cash' | 'card' | 'paynow', subscribeId?: string }} orderData
+ * @returns {Promise<import('../types/swapTypes').SwapCustomerOrder>}
+ */
+export const placeCustomerOrder = async ({ email, items = [], paymentMethod, subscribeId = '' }) => {
+  const eligibleItems = items.filter((item) => item?.id && !String(item.id).startsWith('manual-'));
+
+  if (subscribeId && eligibleItems.length === items.length && eligibleItems.length > 0) {
+    const response = await createSwapOrder({
+      subscribe_id_c: subscribeId,
+      customer_address_id_c: '',
+      items: eligibleItems.map((item) => ({
+        id: item.id,
+        evaluated_points_c: String(Number.parseInt(String(item.points || '0').replace(/[^\d-]/g, ''), 10) || 0),
+      })),
+      customer_address: '.',
+    });
+
+    const data = assertSwapSuccess(response);
+    const createdOrder = data?.order;
+    const totalPoints = Number.parseInt(createdOrder?.order_cost_c || '0', 10) || 0;
+    const itemCount = Number.parseInt(createdOrder?.total_items_c || '0', 10) || eligibleItems.length;
+
+    return {
+      id: createdOrder?.unique_id_c || createdOrder?.id || `ORD-${Date.now()}`,
+      status: createdOrder?.status_c || 'Placed',
+      date: createdOrder?.order_date_c || new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date()),
+      itemCount: `${itemCount} item${itemCount === 1 ? '' : 's'}`,
+      total: `${totalPoints} pts`,
+      paymentMethod,
+      email,
+    };
+  }
+
+  if (!SWAP_USE_MOCK) {
+    throw new Error('Swap order placement requires product ids and a subscribe id.');
+  }
+
+  await delay();
+
+  const totalPoints = (items || []).reduce((sum, item) => {
+    const value = Number.parseInt(String(item?.points || '0').replace(/[^\d-]/g, ''), 10);
+    return sum + (Number.isNaN(value) ? 0 : value);
+  }, 0);
+
+  const itemCount = items.length;
+  const order = {
+    id: `ORD-${8128 + customerOrdersStore.length}`,
+    status: 'Placed',
+    date: new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date()),
+    itemCount: `${itemCount} item${itemCount === 1 ? '' : 's'}`,
+    total: `${totalPoints} pts`,
+    paymentMethod,
+    email,
+  };
+
+  customerOrdersStore = [order, ...customerOrdersStore];
+  return order;
+};
+
+/**
  * Get customer subscriptions.
  * @param {string} email
- * @returns {Promise<SwapSubscription[]>}
+ * @returns {Promise<import('../types/swapTypes').SwapSubscription[]>}
  */
 export const getCustomerSubscriptions = async (email) => {
   if (SWAP_USE_MOCK) {
@@ -843,7 +986,7 @@ export const getActiveCustomerSubscriptions = async (email) => {
 /**
  * Get customer pickups.
  * @param {string} email
- * @returns {Promise<SwapPickup[]>}
+ * @returns {Promise<import('../types/swapTypes').SwapPickup[]>}
  */
 export const getCustomerPickups = async (email) => {
   if (SWAP_USE_MOCK) {
@@ -881,7 +1024,7 @@ export const getAllCustomerPickups = async (email) => {
  * Get details of customer subscription.
  * @param {string} email
  * @param {string} subscriptionId
- * @returns {Promise<SwapSubscription>}
+ * @returns {Promise<import('../types/swapTypes').SwapSubscription>}
  */
 export const getCustomerSubscriptionDetails = async (email, subscriptionId) => {
   if (SWAP_USE_MOCK) {
@@ -941,7 +1084,7 @@ export const getActivePackageDetails = async (email) => {
  * Get details of customer pickup.
  * @param {string} email
  * @param {string} pickupId
- * @returns {Promise<SwapPickup>}
+ * @returns {Promise<import('../types/swapTypes').SwapPickup>}
  */
 export const getCustomerPickupDetails = async (email, pickupId) => {
   if (SWAP_USE_MOCK) {
@@ -956,7 +1099,7 @@ export const getCustomerPickupDetails = async (email, pickupId) => {
 /**
  * Review product with approve/reject action.
  * @param {{ productId: string, action: 'approve' | 'reject', notes?: string, reviewedBy?: string }} params
- * @returns {Promise<SwapReviewResponse>}
+ * @returns {Promise<import('../types/swapTypes').SwapReviewResponse>}
  */
 export const reviewProduct = async ({ productId, action, notes = '', reviewedBy = 'ops@swapaholic.com' }) => {
   await delay();
@@ -989,8 +1132,8 @@ export const reviewProduct = async ({ productId, action, notes = '', reviewedBy 
  * Get subscriptions list by tenancy.
  * Endpoint: POST /{api_ver}/subscriptions/list
  * Request: { tenancy: 'SWAP.SUB.TYPE.ITEMS.STORE' | 'SWAP.SUB.TYPE.POINTS.SHOP' | 'SWAP.SUB.TYPE.CONVERSIONS.SHOP' }
- * @param {SwapSubscriptionTenancy} tenancy
- * @returns {Promise<SwapApiEnvelope | Record<string, unknown>>}
+ * @param {import('../types/swapTypes').SwapSubscriptionTenancy} tenancy
+ * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<Record<string, unknown>> | Record<string, unknown>>}
  */
 export const getSubscriptionsList = async (tenancy = 'SWAP.SUB.TYPE.ITEMS.STORE') => {
   if (SWAP_USE_MOCK) {
@@ -1019,8 +1162,8 @@ export const getAllSubscriptions = async () => {
 /**
  * Get customer subscribes list using customer id returned by login API.
  * Endpoint: POST /{api_ver}/subscribes/list
- * @param {SwapSubscribesRequest} params
- * @returns {Promise<SwapApiEnvelope | Record<string, unknown>>}
+ * @param {import('../types/swapTypes').SwapSubscribesRequest} params
+ * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<Record<string, unknown>> | Record<string, unknown>>}
  */
 export const getCustomerSubscribesList = async ({
   customerId,
@@ -1054,7 +1197,7 @@ export const getCustomerSubscribesList = async ({
 /**
  * Get customer details with subscription and wallet data.
  * Endpoint: POST /{api_ver}/customers/get
- * @returns {Promise<SwapApiEnvelope | Record<string, unknown>>}
+ * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<Record<string, unknown>> | Record<string, unknown>>}
  */
 export const getCustomerDetails = async () => {
   if (SWAP_USE_MOCK) {
@@ -1077,8 +1220,8 @@ export const getCustomerDetails = async () => {
 /**
  * Get items in a pickup.
  * Endpoint: POST /v3/users/customer-items/list/by/pickup
- * @param {SwapPickupItemsRequest} params
- * @returns {Promise<SwapApiEnvelope | Record<string, unknown>>}
+ * @param {import('../types/swapTypes').SwapPickupItemsRequest} params
+ * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<Record<string, unknown>> | Record<string, unknown>>}
  */
 export const getItemsByPickup = async ({ pickupId, maxResults = 20, offset = 0, filters = [] }) => {
   if (SWAP_USE_MOCK) {
@@ -1116,8 +1259,8 @@ export const getItemsByPickup = async ({ pickupId, maxResults = 20, offset = 0, 
 /**
  * Get customer unreviewed/unconfirmed items.
  * Endpoint: POST /{api_ver}/customer-items/list
- * @param {SwapUnreviewedItemsRequest} params
- * @returns {Promise<SwapApiEnvelope | Record<string, unknown>>}
+ * @param {import('../types/swapTypes').SwapUnreviewedItemsRequest} params
+ * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<Record<string, unknown>> | Record<string, unknown>>}
  */
 export const getCustomerUnreviewedItems = async ({ maxResults = 21, offset = 0, filters = [] } = {}) => {
   if (SWAP_USE_MOCK) {
@@ -1151,8 +1294,8 @@ export const getCustomerUnreviewedItems = async ({ maxResults = 21, offset = 0, 
 /**
  * Add item to customer pickup.
  * Endpoint: POST /v3/users/customer-items/init
- * @param {SwapAddItemRequest} params
- * @returns {Promise<SwapApiEnvelope | Record<string, unknown>>}
+ * @param {import('../types/swapTypes').SwapAddItemRequest} params
+ * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<Record<string, unknown>> | Record<string, unknown>>}
  */
 export const addItemToCustomerPickup = async ({ pickupId, thumbnailFile }) => {
   if (SWAP_USE_MOCK) {

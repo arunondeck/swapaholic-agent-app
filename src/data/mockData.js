@@ -319,134 +319,7 @@ export const mockBoothCheckouts = [
   },
 ];
 
-/**
- * @typedef {Object} SwapNamedEntity
- * @property {string} id
- * @property {string} name
- */
-
-/**
- * @typedef {SwapNamedEntity & {code_c?: string, google_product_category_c?: string}} SwapCategory
- * @typedef {SwapNamedEntity & {code_c?: string}} SwapColor
- * @typedef {SwapNamedEntity & {code_c?: string}} SwapStyle
- * @typedef {SwapNamedEntity & {us_size_c?: string, standard_c?: string, type_c?: string}} SwapSize
- * @typedef {SwapNamedEntity & {type_c?: string}} SwapCustomerInfo
- * @typedef {SwapNamedEntity & {tiled_collection_c?: string}} SwapCollection
- * @typedef {SwapNamedEntity & {subscribe_type_c?: string, status_c?: string}} SwapSubscribe
- */
-
-/**
- * @typedef {Object} SwapImage
- * @property {string} id
- * @property {string} name
- * @property {string} type_c
- * @property {string} unique_id_c
- * @property {string} date_entered
- * @property {number} sequence_no
- */
-
-/**
- * @typedef {Object} SwapProduct
- * @property {string} id
- * @property {string} name
- * @property {string} rubric_points_c
- * @property {string} evaluated_points_c
- * @property {string} markup_percentage_c
- * @property {string} markdown_percentage_c
- * @property {string} stage_c
- * @property {string} status_c
- * @property {string} sub_status_c
- * @property {string} location_c
- * @property {string} unique_item_id_c
- * @property {string} date_entered
- * @property {string} thumbnail_c
- * @property {string} available_c
- * @property {SwapImage[]} images
- * @property {SwapNamedEntity} brand
- * @property {SwapNamedEntity} occasion
- * @property {SwapSize} size
- * @property {SwapNamedEntity} made_in
- * @property {SwapStyle} style
- * @property {SwapColor} color
- * @property {SwapNamedEntity[]} materials
- * @property {SwapNamedEntity[]} policies
- * @property {SwapNamedEntity & {code_c?: string}} user_segment
- * @property {SwapCategory} category
- * @property {SwapCustomerInfo} customer
- * @property {SwapNamedEntity} pick_up
- * @property {SwapCollection[]} collections
- * @property {null | Record<string, unknown>} cart
- */
-
-/**
- * @typedef {SwapNamedEntity & {
- *   validity_c?: string,
- *   number_of_items_c?: string,
- *   price_c?: string,
- *   type_c?: string,
- *   status_c?: string
- * }} SwapSubscriptionPlan
- */
-
-/**
- * @typedef {SwapSubscribe & {
- *   number_of_items_c?: string,
- *   expiry_date_c?: string,
- *   number_of_accepted_items_c?: string,
- *   number_of_rejected_items_c?: string,
- *   items_swapped_c?: string,
- *   subscription?: SwapSubscriptionPlan | null
- * }} SwapCustomerSubscribe
- */
-
-/**
- * @typedef {SwapCustomerInfo & {
- *   first_name_c?: string,
- *   last_name_c?: string,
- *   email_c?: string,
- *   mobile_c?: string,
- *   status_c?: string,
- *   total_items_surrendered_c?: string,
- *   total_items_swapped_c?: string,
- *   total_available_points_c?: string,
- *   subscribe?: SwapCustomerSubscribe | null,
- *   shop_subscribe?: SwapCustomerSubscribe | null,
- *   event_subscribe?: SwapCustomerSubscribe | null
- * }} SwapCustomer
- */
-
-/**
- * @typedef {Object} SwapCustomerOrder
- * @property {string} id
- * @property {string} status
- * @property {string} date
- * @property {string} itemCount
- * @property {string} total
- */
-
-/**
- * @typedef {Object} SwapCustomerPickup
- * @property {string} id
- * @property {string} subscriptionId
- * @property {string} date
- * @property {string} address
- * @property {number} totalItems
- * @property {number} remainingItems
- * @property {Array<Record<string, string>>} items
- */
-
-/**
- * @typedef {Object} SwapProductReview
- * @property {string} id
- * @property {string} productId
- * @property {string} action
- * @property {string} status
- * @property {string} reviewedBy
- * @property {string} reviewedAt
- * @property {string} notes
- */
-
-/** @type {SwapProduct[]} */
+/** @type {import('../types/swapTypes').SwapProduct[]} */
 export const mockSwapProducts = [
   {
     id: '99aecefd-7daf-3888-2f5f-61fb95f2a026',
@@ -632,7 +505,7 @@ export const customerSubscriptions = [
   },
 ];
 
-/** @type {SwapSubscriptionPlan[]} */
+/** @type {import('../types/swapTypes').SwapSubscriptionPlan[]} */
 export const swapSubscriptionCatalog = [
   {
     id: 'PLAN-LITE',
@@ -663,10 +536,10 @@ export const swapSubscriptionCatalog = [
   },
 ];
 
-/** @type {SwapProductReview[]} */
+/** @type {import('../types/swapTypes').SwapProductReview[]} */
 export const mockProductReviews = [];
 
-/** @type {SwapCustomerPickup[]} */
+/** @type {import('../types/swapTypes').SwapCustomerPickup[]} */
 export const customerPickups = [
   {
     id: 'PK-9011',
@@ -688,7 +561,7 @@ export const customerPickups = [
   },
 ];
 
-/** @type {SwapCustomerOrder[]} */
+/** @type {import('../types/swapTypes').SwapCustomerOrder[]} */
 export const customerOrders = [
   {
     id: 'ORD-8127',
@@ -708,6 +581,7 @@ export const customerOrders = [
 
 export const customerSwappedInItems = [...pickupOneItems, ...pickupTwoItems];
 
+/** @type {import('../types/swapTypes').SwapCheckoutCartItem[]} */
 export const customerCheckoutCart = [
   { sku: 'SW-4410', name: 'Beige Utility Jacket', size: 'M', points: '55 pts' },
   { sku: 'SW-4418', name: 'Black Pleated Skirt', size: 'S', points: '45 pts' },
@@ -735,7 +609,7 @@ const shopSubscribe = {
   },
 };
 
-/** @type {{ token: string, customer: SwapCustomer, state_hash: null }} */
+/** @type {import('../types/swapTypes').SwapLoginResponse} */
 export const customerSuccessData = {
   token: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.mock-token',
   customer: {
