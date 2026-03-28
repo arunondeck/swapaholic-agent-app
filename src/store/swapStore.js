@@ -1,11 +1,15 @@
 import { create } from 'zustand';
-import { getAllSubscriptions } from '../api/swapOpsApi';
+import { getAllSubscriptions, getShopPointsSubscriptions } from '../api/swapOpsApi';
 
 export const useSwapStore = create((set, get) => ({
   allSubscriptions: [],
   subscriptionsLoaded: false,
   subscriptionsLoading: false,
   subscriptionsError: '',
+  shopPointsSubscriptions: [],
+  shopPointsSubscriptionsLoaded: false,
+  shopPointsSubscriptionsLoading: false,
+  shopPointsSubscriptionsError: '',
   activeCustomer: null,
   setActiveCustomerSession: (session) => {
     const email = session?.email || session?.profile?.email || '';
@@ -41,6 +45,32 @@ export const useSwapStore = create((set, get) => ({
       set({
         subscriptionsLoading: false,
         subscriptionsError: error?.message || 'Failed to fetch subscriptions.',
+      });
+      throw error;
+    }
+  },
+  fetchShopPointsSubscriptions: async ({ force = false } = {}) => {
+    if (!force && (get().shopPointsSubscriptionsLoaded || get().shopPointsSubscriptionsLoading)) {
+      return get().shopPointsSubscriptions;
+    }
+
+    set({
+      shopPointsSubscriptionsLoading: true,
+      shopPointsSubscriptionsError: '',
+    });
+
+    try {
+      const shopPointsSubscriptions = await getShopPointsSubscriptions();
+      set({
+        shopPointsSubscriptions,
+        shopPointsSubscriptionsLoaded: true,
+        shopPointsSubscriptionsLoading: false,
+      });
+      return shopPointsSubscriptions;
+    } catch (error) {
+      set({
+        shopPointsSubscriptionsLoading: false,
+        shopPointsSubscriptionsError: error?.message || 'Failed to fetch shop points subscriptions.',
       });
       throw error;
     }

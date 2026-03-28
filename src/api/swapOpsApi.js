@@ -1159,6 +1159,72 @@ export const getAllSubscriptions = async () => {
   return Array.from(uniqueById.values());
 };
 
+export const getShopPointsSubscriptions = async () => {
+  const response = await getSubscriptionsList('SWAP.SUB.TYPE.POINTS.SHOP');
+  return getResponseData(response).subscriptions || EMPTY_ARRAY;
+};
+
+export const saveShopSubscription = async ({
+  paymentMode = 'cash',
+  srUserId,
+  subscription,
+  authToken = '',
+  addOns = EMPTY_ARRAY,
+  type = 'SWAP.SUBSCRIBE.TYPE.SHOP',
+  code = '',
+  autoRenew = 'off',
+}) => {
+  if (!srUserId) {
+    throw new Error('Missing sr_user_id for subscription purchase.');
+  }
+
+  if (!subscription?.id) {
+    throw new Error('Missing subscription data for subscription purchase.');
+  }
+
+  const normalizedPaymentMode = String(paymentMode || '').toLowerCase();
+  if (!['cash', 'card', 'paynow'].includes(normalizedPaymentMode)) {
+    throw new Error('Invalid payment mode. Expected cash, card, or paynow.');
+  }
+
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return {
+      status: true,
+      success: {
+        code: 'SUBSCRIBE-201',
+        message: 'Subscription purchase created',
+        data: {
+          id: `SUB-${Date.now()}`,
+          payment_mode: normalizedPaymentMode,
+          sr_user_id: srUserId,
+          subscription,
+          add_ons: addOns,
+          type,
+          code_c: code,
+          auto_renew_c: autoRenew,
+        },
+      },
+      error: null,
+      status_code: 200,
+    };
+  }
+
+  return postJson(
+    `subscribes/save/shop/${normalizedPaymentMode}`,
+    {
+      sr_user_id: srUserId,
+      subscription,
+      add_ons: addOns,
+      type,
+      code_c: code,
+      auto_renew_c: autoRenew,
+    },
+    true,
+    authToken ? { Authorization: `Bearer ${authToken}` } : {}
+  );
+};
+
 /**
  * Get customer subscribes list using customer id returned by login API.
  * Endpoint: POST /{api_ver}/subscribes/list
