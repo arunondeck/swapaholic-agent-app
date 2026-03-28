@@ -13,6 +13,15 @@ import { styles } from '../../styles/commonStyles';
 
 const getPendingReviewItems = (response) => response?.success?.data?.items || [];
 
+const parseDateValue = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   const activeCustomer = useSwapStore((state) => state.activeCustomer);
   const activeEmail = customerEmail || activeCustomer?.email || '';
@@ -68,23 +77,12 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
     };
   }, [activeCustomer?.details, activeCustomer?.email, activeEmail, withLoader]);
 
+  const shopSubscribe = customer?.customerSubscribe?.shop_subscribe || null;
   const itemsSwappedInSummary = useMemo(() => {
-    const totals = pickups.reduce(
-      (summary, pickup) => {
-        const available = Number.parseInt(String(pickup.totalItems || 0), 10) || 0;
-        const remaining = Number.parseInt(String(pickup.remainingItems || 0), 10) || 0;
-        const swappedIn = Math.max(available - remaining, 0);
-
-        return {
-          swappedIn: summary.swappedIn + swappedIn,
-          available: summary.available + available,
-        };
-      },
-      { swappedIn: 0, available: 0 }
-    );
-
-    return `${totals.swappedIn}/${totals.available}`;
-  }, [pickups]);
+    const acceptedItems = Number.parseInt(String(shopSubscribe?.number_of_accepted_items_c || 0), 10) || 0;
+    const totalItems = Number.parseInt(String(shopSubscribe?.number_of_items_c || 0), 10) || 0;
+    return `${acceptedItems}/${totalItems}`;
+  }, [shopSubscribe]);
 
   if (!customer) {
     return (
@@ -95,10 +93,19 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   }
 
   const swapInTargetPickup = pickups.find((pickup) => Number.parseInt(String(pickup.remainingItems || 0), 10) > 0);
-  const canAddToSubscription = Number.parseInt(String(activeSubscription?.itemsRemaining || 0), 10) > 0;
-  const activePackageSubtitle = activeSubscription
-    ? `${activeSubscription.status} | Renews ${activeSubscription.renewalDate || 'NA'}`
-    : 'No active package found';
+  const shopSubscribeExpiry = parseDateValue(shopSubscribe?.expiry_date_c);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const isShopSubscribeExpired = shopSubscribeExpiry ? shopSubscribeExpiry < today : false;
+  const hasActiveShopSubscribe = Boolean(shopSubscribe && !isShopSubscribeExpired);
+  const displayedPackageName = customer.activePackage || activeSubscription?.plan || '';
+  const displayedPackageSubtitle = isShopSubscribeExpired
+    ? 'Package expired'
+    : hasActiveShopSubscribe && activeSubscription
+      ? `${activeSubscription.status} | Renews ${activeSubscription.renewalDate || 'NA'}`
+      : '';
+  const canAddToSubscription = hasActiveShopSubscribe && Number.parseInt(String(activeSubscription?.itemsRemaining || 0), 10) > 0;
+  const canOpenActiveSubscription = hasActiveShopSubscribe && Boolean(activeSubscription);
 
   return (
     <ScreenShell title={customer.name} subtitle={customer.email} onBack={pop} backgroundColor="#e7f7ef">
@@ -114,31 +121,33 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
           </View>
         </View>
 
-        <View style={[styles.overviewTableRow, styles.overviewTableRowBorder]}>
-          <TouchableOpacity
-            activeOpacity={activeSubscription ? 0.8 : 1}
-            onPress={
-              activeSubscription
-                ? () =>
-                    push('customerSubscriptionDetail', {
-                      email: customer.email,
-                      subscriptionId: activeSubscription.id,
-                    })
-                : undefined
-            }
-            style={[styles.overviewTableCell, styles.overviewTableCellWithDivider]}
-          >
+        <TouchableOpacity
+          activeOpacity={canOpenActiveSubscription ? 0.8 : 1}
+          onPress={
+            canOpenActiveSubscription
+              ? () =>
+                  push('customerSubscriptionDetail', {
+                    email: customer.email,
+                    subscriptionId: activeSubscription.id,
+                  })
+              : undefined
+          }
+          style={[styles.overviewTableRow, styles.overviewTableRowBorder]}
+        >
+          <View style={styles.overviewTableCell}>
             <Text style={styles.overviewTableLabel}>Active Package</Text>
-            <Text style={[styles.overviewTableValue, activeSubscription ? styles.overviewTableLinkValue : null]}>
-              {activeSubscription?.plan || customer.activePackage}
+            <Text style={[styles.overviewTableValue, canOpenActiveSubscription ? styles.overviewTableLinkValue : null]}>
+              {displayedPackageName}
             </Text>
-            <Text style={styles.overviewTableHint}>{activePackageSubtitle}</Text>
-          </TouchableOpacity>
+            {displayedPackageSubtitle ? <Text style={styles.overviewTableHint}>{displayedPackageSubtitle}</Text> : null}
+          </View>
+        </TouchableOpacity>
 
+        <View style={[styles.overviewTableRow, styles.overviewTableRowBorder]}>
           <View style={styles.overviewTableCell}>
             <Text style={styles.overviewTableLabel}>Items Swapped In</Text>
             <Text style={styles.overviewTableValue}>{itemsSwappedInSummary}</Text>
-            <Text style={styles.overviewTableHint}>Used / total pickup capacity</Text>
+            <Text style={styles.overviewTableHint}>Accepted items / package total</Text>
           </View>
         </View>
       </View>

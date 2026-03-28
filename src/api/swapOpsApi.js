@@ -239,21 +239,53 @@ const formatPlanLabel = (plan) => {
   return `${name} - ${count} pickup${count === 1 ? '' : 's'} / month`;
 };
 
+const formatDateOnly = (value) => {
+  if (!value) {
+    return 'NA';
+  }
+
+  const normalizedValue = String(value);
+  const isoDateMatch = normalizedValue.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoDateMatch) {
+    return isoDateMatch[1];
+  }
+
+  const parsedDate = new Date(normalizedValue);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return normalizedValue;
+  }
+
+  return parsedDate.toISOString().slice(0, 10);
+};
+
+const formatActiveCustomerPackage = (customer = {}) => {
+  const shopSubscribe = customer?.shop_subscribe;
+  const shopSubscriptionName = shopSubscribe?.subscription?.name || shopSubscribe?.name || '';
+  const shopSubscriptionItems = toNumber(shopSubscribe?.number_of_items_c, 0);
+
+  if (shopSubscribe) {
+    return shopSubscriptionName ? `${shopSubscriptionName} ${shopSubscriptionItems} items` : `${shopSubscriptionItems} items`;
+  }
+
+  return (
+    customer?.subscribe?.subscription?.name ||
+    customer?.event_subscribe?.subscription?.name ||
+    ''
+  );
+};
+
 const mapApiCustomerToProfile = (customer, email = '', wallets = {}) => ({
   id: customer?.id || '',
   name: getCustomerName(customer),
   email: customer?.email_c || email,
   points: `${wallets?.shop ?? customer?.total_available_points_c ?? '0'} pts`,
-  activePackage:
-    customer?.shop_subscribe?.subscription?.name ||
-    customer?.subscribe?.subscription?.name ||
-    customer?.event_subscribe?.subscription?.name ||
-    'No active package',
-  pointsExpiryDate:
+  activePackage: formatActiveCustomerPackage(customer),
+  pointsExpiryDate: formatDateOnly(
     customer?.shop_subscribe?.expiry_date_c ||
-    customer?.subscribe?.expiry_date_c ||
-    customer?.event_subscribe?.expiry_date_c ||
-    'NA',
+      customer?.subscribe?.expiry_date_c ||
+      customer?.event_subscribe?.expiry_date_c ||
+      'NA'
+  ),
   itemsSwappedIn: toNumber(customer?.total_items_surrendered_c),
   itemsSwappedOut: toNumber(customer?.total_items_swapped_c),
   ordersMade: 0,
@@ -572,10 +604,46 @@ export const loginAsCustomer = async (email) => {
   if (SWAP_USE_MOCK) {
     await delay();
     const customer = getMockCustomerProfile(email);
+    console.log('[swapApi] loginAsCustomer mock request', {
+      useMock: true,
+      email,
+    });
     return toLoginPayload(customer);
   }
 
-  return postJson('yHncKdVLF2/customers/mime/login/email/3BCB2', { email_c: email });
+  const path = 'yHncKdVLF2/customers/mime/login/email/3BCB2';
+  const payload = { email_c: email };
+  const url = buildUrl(path);
+
+  console.log('[swapApi] loginAsCustomer request', {
+    useMock: false,
+    method: 'POST',
+    url,
+    payload,
+  });
+
+  try {
+    const response = await postJson(path, payload);
+    const data = response?.success?.data || {};
+    const normalizedResponse = {
+      token: data?.token || response?.token || '',
+      customer: data?.customer || response?.customer || null,
+      state_hash: data?.state_hash ?? response?.state_hash ?? null,
+      response,
+    };
+
+    console.log('[swapApi] loginAsCustomer response', response);
+    console.log('[swapApi] loginAsCustomer normalizedResponse', normalizedResponse);
+    return normalizedResponse;
+  } catch (error) {
+    console.error('[swapApi] loginAsCustomer error', {
+      method: 'POST',
+      url,
+      payload,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 };
 
 export const loginAppUser = async (email, password, authToken = '') => {
@@ -1405,8 +1473,9 @@ export const findProductByQrCode = async (email, scanText) => {
       customerCart.find(
         (item) =>
           item.sku?.toLowerCase() === query ||
+          item.unique_item_id_c?.toLowerCase() === query ||
           item.name?.toLowerCase() === query ||
-          `${item.sku} ${item.name}`.toLowerCase().includes(query)
+          `${item.sku || item.unique_item_id_c || ''} ${item.name}`.toLowerCase().includes(query)
       ) || null
     );
   }

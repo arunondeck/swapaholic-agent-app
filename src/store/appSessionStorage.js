@@ -57,3 +57,13 @@ export const getStoredBoothToken = async () => {
   const session = appSessionCache || (await loadStoredAppSession());
   return session?.boothToken || '';
 };
+
+export const getStoredShopCustomerId = async () => {
+  const session = appSessionCache || (await loadStoredAppSession());
+  return session?.shopCustomerId || '';
+};
+
+export const getStoredBoothCustomerId = async () => {
+  const session = appSessionCache || (await loadStoredAppSession());
+  return session?.boothCustomerId || '';
+};

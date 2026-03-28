@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Image, Text, View } from 'react-native';
+import { Text } from 'react-native';
 import { getCustomerProfile, getCustomerSwappedInItems } from '../../api/swapOpsApi';
+import { ProductCard } from '../../components/ProductCard';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
-import { styles } from '../../styles/commonStyles';
 
 export const CustomerSwappedInScreen = ({ pop, customerEmail }) => {
   const [customer, setCustomer] = useState(null);
@@ -56,14 +56,7 @@ export const CustomerSwappedInScreen = ({ pop, customerEmail }) => {
   return (
     <ScreenShell title="Items Swapped In" subtitle={`${customer.name} swap-in list`} onBack={pop} backgroundColor="#ffe4e1">
       {items.map((item) => (
-        <View key={item.id} style={styles.itemRow}>
-          <Image source={{ uri: item.image }} style={styles.itemImage} />
-          <View style={styles.itemDetails}>
-            <Text style={styles.cardTitle}>{item.id}</Text>
-            <Text style={styles.itemMeta}>Brand: {item.brand}</Text>
-            <Text style={styles.itemMeta}>Category: {item.category}</Text>
-          </View>
-        </View>
+        <ProductCard key={item.id} product={item} subtitle={`Item ID: ${item.unique_item_id_c || item.id} | Category: ${item.category?.name || 'NA'}`} />
       ))}
     </ScreenShell>
   );

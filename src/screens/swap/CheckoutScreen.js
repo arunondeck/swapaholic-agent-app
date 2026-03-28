@@ -3,6 +3,7 @@ import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { findProductByQrCode, getCustomerCheckoutCart, getCustomerProfile, placeCustomerOrder } from '../../api/swapOpsApi';
 import { Card } from '../../components/Card';
 import { ScreenShell } from '../../components/ScreenShell';
+import { SwapProductItemWithActions } from '../../components/SwapProductItemWithActions';
 import { useLoader } from '../../context/LoaderContext';
 import { styles } from '../../styles/commonStyles';
 
@@ -18,11 +19,13 @@ const parsePoints = (value) => {
 };
 
 const normalizeCartItem = (item, index = 0) => ({
-  id: item.id || item.sku || `cart-item-${index}`,
-  sku: item.sku || '',
+  id: item.id || item.unique_item_id_c || `cart-item-${index}`,
+  unique_item_id_c: item.unique_item_id_c || item.sku || '',
   name: item.name || 'Unnamed Product',
   size: item.size || '',
-  points: String(item.points || '0'),
+  brand: item.brand || '',
+  thumbnail_c: item.thumbnail_c || item.thumbnail || item.image || item.images?.[0]?.name || '',
+  points: String(item.points || (item.evaluated_points_c ? `${item.evaluated_points_c} pts` : '0')),
 });
 
 export const CheckoutScreen = ({ pop, customerEmail }) => {
@@ -99,7 +102,9 @@ export const CheckoutScreen = ({ pop, customerEmail }) => {
       }
 
       setCartItems((prev) => {
-        if (prev.some((item) => item.sku === product.sku)) {
+        const productKey = product.unique_item_id_c || product.sku || product.id;
+
+        if (prev.some((item) => (item.unique_item_id_c || item.id) === productKey)) {
           setNotice(`"${product.name}" is already in the cart.`);
           return prev;
         }
@@ -243,17 +248,11 @@ export const CheckoutScreen = ({ pop, customerEmail }) => {
         </View>
       ) : (
         cartItems.map((item) => (
-          <View key={item.id} style={styles.listItem}>
-            <View style={styles.row}>
-              <Text style={styles.cardTitle}>{item.name}</Text>
-              <Text style={styles.rowValue}>{parsePoints(item.points)} pts</Text>
-            </View>
-            {!!item.sku && <Text style={styles.itemMeta}>SKU: {item.sku}</Text>}
-            {!!item.size && <Text style={styles.itemMeta}>Size: {item.size}</Text>}
-            <TouchableOpacity onPress={() => removeItem(item.id)} style={styles.secondaryButton}>
-              <Text style={styles.secondaryButtonText}>Remove</Text>
-            </TouchableOpacity>
-          </View>
+          <SwapProductItemWithActions
+            key={item.id}
+            product={item}
+            actions={[{ key: 'remove', label: 'Remove', onPress: () => removeItem(item.id), variant: 'neutral' }]}
+          />
         ))
       )}
 

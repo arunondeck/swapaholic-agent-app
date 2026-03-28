@@ -40,7 +40,7 @@ export const InspectionScreen = ({ pop }) => {
       {error ? <Text>{error}</Text> : null}
       {products.map((product) => (
         <View key={product.id} style={styles.listItem}>
-          <Row label="SKU" value={product.unique_item_id_c} />
+          <Row label="ID" value={product.unique_item_id_c} />
           <Row label="Product" value={product.name} />
           <Row label="Status" value={product.status_c} />
           <Row label="Points" value={`${product.evaluated_points_c} pts`} />

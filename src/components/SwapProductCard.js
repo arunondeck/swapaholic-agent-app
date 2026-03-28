@@ -16,7 +16,7 @@ const readName = (value, fallback = 'NA') => {
   return fallback;
 };
 
-export const ProductCard
+export const SwapProductCard
  = ({ product, subtitle, footer, children }) => {
   const thumbnail =
     product?.thumbnail ||

@@ -5,7 +5,10 @@ import { clearStoredAppSession, loadStoredAppSession, saveStoredAppSession } fro
 const SHOP_EMAIL = (process.env.EXPO_PUBLIC_SWAP_EMAIL || '').trim().toLowerCase();
 const BOOTH_EMAIL = (process.env.EXPO_PUBLIC_BOOTH_EMAIL || '').trim().toLowerCase();
 
-const resolveTokenForEmail = async (storedToken, email) => {
+const getCustomerIdFromSession = (session, fallbackCustomerId = '') =>
+  session?.customer?.id || session?.user?.id || fallbackCustomerId || '';
+
+const resolveSessionForEmail = async (storedToken, storedCustomerId, email) => {
   if (!email) {
     throw new Error('Missing auth email configuration.');
   }
@@ -14,7 +17,10 @@ const resolveTokenForEmail = async (storedToken, email) => {
     try {
       const session = await checkCustomerSession(storedToken);
       if (session?.token) {
-        return session.token;
+        return {
+          token: session.token,
+          customerId: getCustomerIdFromSession(session, storedCustomerId),
+        };
       }
     } catch (error) {
       // Refresh the token with mime login when the saved token is invalid.
@@ -23,12 +29,16 @@ const resolveTokenForEmail = async (storedToken, email) => {
 
   const loginResponse = await loginAsCustomer(email);
   const token = loginResponse?.token || '';
+  const customerId = loginResponse?.customer?.id || '';
 
   if (!token) {
     throw new Error(`Failed to get token for ${email}.`);
   }
 
-  return token;
+  return {
+    token,
+    customerId,
+  };
 };
 
 export const useAppSessionStore = create((set, get) => ({
@@ -37,6 +47,8 @@ export const useAppSessionStore = create((set, get) => ({
   loading: false,
   shopToken: '',
   boothToken: '',
+  shopCustomerId: '',
+  boothCustomerId: '',
   error: '',
   hydrate: async () => {
     if (get().hydrated) {
@@ -50,6 +62,8 @@ export const useAppSessionStore = create((set, get) => ({
       checkingSession: true,
       shopToken: stored?.shopToken || '',
       boothToken: stored?.boothToken || '',
+      shopCustomerId: stored?.shopCustomerId || '',
+      boothCustomerId: stored?.boothCustomerId || '',
       error: '',
     });
 
@@ -68,19 +82,26 @@ export const useAppSessionStore = create((set, get) => ({
     set({ loading: true, error: '' });
 
     try {
-      const [shopToken, boothToken] = await Promise.all([
-        resolveTokenForEmail(get().shopToken, SHOP_EMAIL),
-        resolveTokenForEmail(get().boothToken, BOOTH_EMAIL),
+      const [shopSession, boothSession] = await Promise.all([
+        resolveSessionForEmail(get().shopToken, get().shopCustomerId, SHOP_EMAIL),
+        resolveSessionForEmail(get().boothToken, get().boothCustomerId, BOOTH_EMAIL),
       ]);
 
-      const auth = { shopToken, boothToken };
+      const auth = {
+        shopToken: shopSession.token,
+        boothToken: boothSession.token,
+        shopCustomerId: shopSession.customerId,
+        boothCustomerId: boothSession.customerId,
+      };
       await saveStoredAppSession(auth);
 
       set({
         hydrated: true,
         loading: false,
-        shopToken,
-        boothToken,
+        shopToken: auth.shopToken,
+        boothToken: auth.boothToken,
+        shopCustomerId: auth.shopCustomerId,
+        boothCustomerId: auth.boothCustomerId,
         error: '',
       });
 
@@ -91,6 +112,8 @@ export const useAppSessionStore = create((set, get) => ({
         loading: false,
         shopToken: '',
         boothToken: '',
+        shopCustomerId: '',
+        boothCustomerId: '',
         error: error?.message || 'Unable to refresh app tokens.',
       });
       throw error;
@@ -101,6 +124,8 @@ export const useAppSessionStore = create((set, get) => ({
     set({
       shopToken: '',
       boothToken: '',
+      shopCustomerId: '',
+      boothCustomerId: '',
       error: '',
     });
   },

@@ -70,8 +70,8 @@ export const CustomerPickupDetailScreen = ({ pop, push, customerEmail, pickupId 
       {(pickup.items || []).map((item) => (
         <ProductCard
           key={item.id}
-          product={{ ...item, thumbnail: item.image, name: item.id, price: item.points }}
-          subtitle={`Category: ${item.category} | ${item.subcategory}`}
+          product={item}
+          subtitle={`Item ID: ${item.unique_item_id_c || item.id} | ${item.category?.name || 'NA'} | ${item.style?.name || 'NA'}`}
         />
       ))}
 

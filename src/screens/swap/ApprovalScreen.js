@@ -1,23 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Image, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { getCustomerUnreviewedItems, reviewCustomerItem } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
+import { SwapProductItemWithActions } from '../../components/SwapProductItemWithActions';
 import { useLoader } from '../../context/LoaderContext';
 import { styles } from '../../styles/commonStyles';
-
-const DEFAULT_THUMBNAIL = 'https://placehold.co/120x120/png?text=Product';
-
-const readName = (value, fallback = 'NA') => {
-  if (typeof value === 'string' && value.trim()) {
-    return value;
-  }
-
-  if (value && typeof value === 'object' && typeof value.name === 'string' && value.name.trim()) {
-    return value.name;
-  }
-
-  return fallback;
-};
 
 const getReviewItems = (response) => {
   if (Array.isArray(response?.success?.data?.items)) {
@@ -30,11 +17,6 @@ const getReviewItems = (response) => {
 
   return [];
 };
-
-const getProductImage = (product) =>
-  product?.thumbnail_c || product?.thumbnail || product?.image || product?.images?.[0]?.name || DEFAULT_THUMBNAIL;
-
-const getProductPoints = (product) => product?.evaluated_points_c || product?.rubric_points_c || product?.bonus_points_c || 'NA';
 
 export const ApprovalScreen = ({ pop, customerEmail }) => {
   const [products, setProducts] = useState([]);
@@ -112,40 +94,36 @@ export const ApprovalScreen = ({ pop, customerEmail }) => {
       ) : null}
 
       {products.map((product) => (
-        <View key={product.id} style={[styles.itemRow, { flexDirection: 'column' }]}>
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <Image source={{ uri: getProductImage(product) }} style={styles.itemImage} />
-            <View style={styles.itemDetails}>
-              <Text style={styles.cardTitle}>{readName(product?.name, 'Product')}</Text>
-              <Text style={styles.itemMeta}>Brand: {readName(product?.brand)}</Text>
-              <Text style={styles.itemMeta}>Points: {getProductPoints(product)}</Text>
-            </View>
-          </View>
-
-          <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={styles.approveBtn}
-              disabled={reviewingId === product.id}
-              onPress={() => handleReview(product, 'approved')}
-            >
-              <Text style={styles.btnText}>{reviewingId === product.id ? 'Submitting...' : 'Approve'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.rejectBtn}
-              disabled={reviewingId === product.id}
-              onPress={() => handleReview(product, 'callback')}
-            >
-              <Text style={styles.btnText}>Callback</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.rejectBtn, { backgroundColor: '#a16207' }]}
-              disabled={reviewingId === product.id}
-              onPress={() => handleReview(product, 'donate')}
-            >
-              <Text style={styles.btnText}>Donate</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <SwapProductItemWithActions
+          key={product.id}
+          product={{
+            ...product,
+            points: product?.evaluated_points_c || product?.rubric_points_c || product?.bonus_points_c || 'NA',
+          }}
+          actions={[
+            {
+              key: 'approve',
+              label: reviewingId === product.id ? 'Submitting...' : 'Approve',
+              onPress: () => handleReview(product, 'approved'),
+              disabled: reviewingId === product.id,
+              variant: 'approve',
+            },
+            {
+              key: 'callback',
+              label: 'Callback',
+              onPress: () => handleReview(product, 'callback'),
+              disabled: reviewingId === product.id,
+              variant: 'reject',
+            },
+            {
+              key: 'donate',
+              label: 'Donate',
+              onPress: () => handleReview(product, 'donate'),
+              disabled: reviewingId === product.id,
+              variant: 'warn',
+            },
+          ]}
+        />
       ))}
     </ScreenShell>
   );

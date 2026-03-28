@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Image, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { formatRemainingItems, getCustomerProfile, getCustomerSubscriptionDetails } from '../../api/swapOpsApi';
+import { ProductCard } from '../../components/ProductCard';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
@@ -72,16 +73,11 @@ export const CustomerSubscriptionDetailScreen = ({ pop, push, customerEmail, sub
 
       <Text style={styles.sectionTitle}>Items</Text>
       {(subscription.items || []).map((item) => (
-        <View key={item.id} style={styles.itemRow}>
-          <Image source={{ uri: item.image }} style={styles.itemImage} />
-          <View style={styles.itemDetails}>
-            <Text style={styles.cardTitle}>{item.id}</Text>
-            <Text style={styles.itemMeta}>Brand: {item.brand}</Text>
-            <Text style={styles.itemMeta}>Category: {item.category}</Text>
-            <Text style={styles.itemMeta}>Subcategory: {item.subcategory}</Text>
-            <Text style={styles.itemMeta}>Size: {item.size}</Text>
-          </View>
-        </View>
+        <ProductCard
+          key={item.id}
+          product={item}
+          subtitle={`Item ID: ${item.unique_item_id_c || item.id} | ${item.category?.name || 'NA'} | ${item.style?.name || 'NA'}`}
+        />
       ))}
 
       {subscription.itemsRemaining > 0 ? (
