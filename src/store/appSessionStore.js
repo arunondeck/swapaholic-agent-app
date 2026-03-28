@@ -4,6 +4,7 @@ import { clearStoredAppSession, loadStoredAppSession, saveStoredAppSession } fro
 
 const SHOP_EMAIL = (process.env.EXPO_PUBLIC_SWAP_EMAIL || '').trim().toLowerCase();
 const BOOTH_EMAIL = (process.env.EXPO_PUBLIC_BOOTH_EMAIL || '').trim().toLowerCase();
+const BUY_POINTS_EMAIL = (process.env.EXPO_PUBLIC_SWAP_BUY_POINTS_EMAIL || '').trim().toLowerCase();
 
 const getCustomerIdFromSession = (session, fallbackCustomerId = '') =>
   session?.customer?.id || session?.user?.id || fallbackCustomerId || '';
@@ -47,8 +48,11 @@ export const useAppSessionStore = create((set, get) => ({
   loading: false,
   shopToken: '',
   boothToken: '',
+  buyPointsEmail: '',
+  buyPointsToken: '',
   shopCustomerId: '',
   boothCustomerId: '',
+  buyPointsCustomerId: '',
   error: '',
   hydrate: async () => {
     if (get().hydrated) {
@@ -62,8 +66,11 @@ export const useAppSessionStore = create((set, get) => ({
       checkingSession: true,
       shopToken: stored?.shopToken || '',
       boothToken: stored?.boothToken || '',
+      buyPointsEmail: stored?.buyPointsEmail || BUY_POINTS_EMAIL,
+      buyPointsToken: stored?.buyPointsToken || '',
       shopCustomerId: stored?.shopCustomerId || '',
       boothCustomerId: stored?.boothCustomerId || '',
+      buyPointsCustomerId: stored?.buyPointsCustomerId || '',
       error: '',
     });
 
@@ -87,11 +94,18 @@ export const useAppSessionStore = create((set, get) => ({
         resolveSessionForEmail(get().boothToken, get().boothCustomerId, BOOTH_EMAIL),
       ]);
 
+      const buyPointsSession = BUY_POINTS_EMAIL
+        ? await resolveSessionForEmail(get().buyPointsToken, get().buyPointsCustomerId, BUY_POINTS_EMAIL)
+        : { token: '', customerId: '' };
+
       const auth = {
         shopToken: shopSession.token,
         boothToken: boothSession.token,
+        buyPointsEmail: BUY_POINTS_EMAIL,
+        buyPointsToken: buyPointsSession.token,
         shopCustomerId: shopSession.customerId,
         boothCustomerId: boothSession.customerId,
+        buyPointsCustomerId: buyPointsSession.customerId,
       };
       await saveStoredAppSession(auth);
 
@@ -100,8 +114,11 @@ export const useAppSessionStore = create((set, get) => ({
         loading: false,
         shopToken: auth.shopToken,
         boothToken: auth.boothToken,
+        buyPointsEmail: auth.buyPointsEmail,
+        buyPointsToken: auth.buyPointsToken,
         shopCustomerId: auth.shopCustomerId,
         boothCustomerId: auth.boothCustomerId,
+        buyPointsCustomerId: auth.buyPointsCustomerId,
         error: '',
       });
 
@@ -112,8 +129,11 @@ export const useAppSessionStore = create((set, get) => ({
         loading: false,
         shopToken: '',
         boothToken: '',
+        buyPointsEmail: '',
+        buyPointsToken: '',
         shopCustomerId: '',
         boothCustomerId: '',
+        buyPointsCustomerId: '',
         error: error?.message || 'Unable to refresh app tokens.',
       });
       throw error;
@@ -124,8 +144,11 @@ export const useAppSessionStore = create((set, get) => ({
     set({
       shopToken: '',
       boothToken: '',
+      buyPointsEmail: '',
+      buyPointsToken: '',
       shopCustomerId: '',
       boothCustomerId: '',
+      buyPointsCustomerId: '',
       error: '',
     });
   },

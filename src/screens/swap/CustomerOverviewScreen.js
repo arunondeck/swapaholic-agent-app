@@ -22,6 +22,27 @@ const parseDateValue = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const getActivePackageDisplayName = (shopSubscribe, fallbackName = '') => {
+  const subscriptionName = String(shopSubscribe?.subscription?.name || shopSubscribe?.name || fallbackName || '').trim();
+  const normalizedSubscriptionName = subscriptionName.toLowerCase();
+
+  if (!subscriptionName) {
+    return fallbackName;
+  }
+
+  if (normalizedSubscriptionName === 'buy points') {
+    const pointCount = Number.parseInt(String(shopSubscribe?.number_of_points_c || 0), 10) || 0;
+    return `${subscriptionName} ${pointCount} Points`;
+  }
+
+  if (normalizedSubscriptionName === 'flexi swap shopper' || normalizedSubscriptionName === 'flexi swqap shoppepr') {
+    const itemCount = Number.parseInt(String(shopSubscribe?.number_of_items_c || 0), 10) || 0;
+    return `${subscriptionName} ${itemCount} Items`;
+  }
+
+  return subscriptionName;
+};
+
 export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   const activeCustomer = useSwapStore((state) => state.activeCustomer);
   const activeEmail = customerEmail || activeCustomer?.email || '';
@@ -98,7 +119,7 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   today.setHours(0, 0, 0, 0);
   const isShopSubscribeExpired = shopSubscribeExpiry ? shopSubscribeExpiry < today : false;
   const hasActiveShopSubscribe = Boolean(shopSubscribe && !isShopSubscribeExpired);
-  const displayedPackageName = customer.activePackage || activeSubscription?.plan || '';
+  const displayedPackageName = getActivePackageDisplayName(shopSubscribe, customer.activePackage || activeSubscription?.plan || '');
   const displayedPackageSubtitle = isShopSubscribeExpired
     ? 'Package expired'
     : hasActiveShopSubscribe && activeSubscription
@@ -153,7 +174,7 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
       </View>
 
       <View style={styles.overviewActionGrid}>
-        <TouchableOpacity style={styles.overviewActionButton} onPress={() => push('checkout', { email: customer.email })}>
+        <TouchableOpacity style={styles.overviewActionButton} onPress={() => push('checkout', { email: customer.email, mode: 'customer' })}>
           <Text style={styles.overviewActionTitle}>Checkout</Text>
           <Text style={styles.overviewActionSubtitle}>Checkout with points</Text>
         </TouchableOpacity>

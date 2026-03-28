@@ -15,7 +15,7 @@ export const SwapModeScreen = ({ push, pop }) => {
       <Card title="Customer Login" subtitle="Enter email and open customer summary" onPress={() => push('customerPortal')} />
       <Card title="Scan Pickups" subtitle="Open pickup scan and linked pickup flows" onPress={() => push('pickupCards')} />
       <Card title="View Subscriptions" subtitle="Browse swap subscription plans" onPress={() => push('swapPlans')} />
-      <Card title="Checkout" subtitle="Scan products and redeem customer points" onPress={() => push('checkout')} />
+      <Card title="Checkout" subtitle="Scan products and process non-customer checkout" onPress={() => push('checkout', { mode: 'nonCustomer' })} />
     </ScreenShell>
   );
 };

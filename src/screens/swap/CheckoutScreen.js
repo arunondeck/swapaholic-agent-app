@@ -1,11 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { findProductByQrCode, getCustomerCheckoutCart, getCustomerProfile, placeCustomerOrder } from '../../api/swapOpsApi';
+import { findProductByQrCode, getCustomerCheckoutCart, getCustomerProfile, placeSwapCheckoutOrder } from '../../api/swapOpsApi';
 import { Card } from '../../components/Card';
+import { CheckoutPaymentSelector } from '../../components/CheckoutPaymentSelector';
 import { ScreenShell } from '../../components/ScreenShell';
 import { SwapProductItemWithActions } from '../../components/SwapProductItemWithActions';
 import { useLoader } from '../../context/LoaderContext';
+import { useAppSessionStore } from '../../store/appSessionStore';
+import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
+import { calculateCheckoutPaymentSummary } from '../../services/checkoutPricingService';
 
 const PAYMENT_OPTIONS = [
   { id: 'cash', label: 'Cash' },
@@ -28,7 +32,7 @@ const normalizeCartItem = (item, index = 0) => ({
   points: String(item.points || (item.evaluated_points_c ? `${item.evaluated_points_c} pts` : '0')),
 });
 
-export const CheckoutScreen = ({ pop, customerEmail }) => {
+export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => {
   const [customer, setCustomer] = useState(null);
   const [cartItems, setCartItems] = useState([]);
   const [error, setError] = useState('');
@@ -37,9 +41,14 @@ export const CheckoutScreen = ({ pop, customerEmail }) => {
   const [manualPoints, setManualPoints] = useState('');
   const [notice, setNotice] = useState('');
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [manualModalVisible, setManualModalVisible] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const { withLoader } = useLoader();
+  const buyPointsEmail = useAppSessionStore((state) => state.buyPointsEmail);
+  const shopPointsSubscriptions = useSwapStore((state) => state.shopPointsSubscriptions);
+  const fetchShopPointsSubscriptions = useSwapStore((state) => state.fetchShopPointsSubscriptions);
+  const isCustomerMode = mode === 'customer';
 
   useEffect(() => {
     let active = true;
@@ -47,10 +56,13 @@ export const CheckoutScreen = ({ pop, customerEmail }) => {
     const loadData = async () => {
       try {
         setError('');
-        const [profile, checkoutCart] = await withLoader(
-          Promise.all([getCustomerProfile(customerEmail), getCustomerCheckoutCart(customerEmail)]),
-          'Loading checkout...'
-        );
+        if (!isCustomerMode) {
+          setCustomer(null);
+          setCartItems([]);
+          return;
+        }
+
+        const [profile, checkoutCart] = await withLoader(Promise.all([getCustomerProfile(customerEmail), getCustomerCheckoutCart(customerEmail)]), 'Loading checkout...');
 
         if (!active) {
           return;
@@ -70,15 +82,40 @@ export const CheckoutScreen = ({ pop, customerEmail }) => {
     return () => {
       active = false;
     };
-  }, [customerEmail, withLoader]);
+  }, [customerEmail, isCustomerMode, withLoader]);
+
+  useEffect(() => {
+    fetchShopPointsSubscriptions().catch(() => null);
+  }, [fetchShopPointsSubscriptions]);
 
   const availablePoints = useMemo(() => parsePoints(customer?.points), [customer?.points]);
   const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + parsePoints(item.points), 0), [cartItems]);
+  const paymentSummary = useMemo(
+    () =>
+      calculateCheckoutPaymentSummary({
+        mode,
+        cartTotal,
+        availablePoints,
+        shopPointsSubscriptions,
+      }),
+    [availablePoints, cartTotal, mode, shopPointsSubscriptions]
+  );
   const remainingPoints = Math.max(availablePoints - cartTotal, 0);
+  const pointsToBuy = paymentSummary.pointsToBuy;
+  const cashPayable = paymentSummary.cashPayable;
+  const checkoutLookupEmail = customer?.email || customerEmail || buyPointsEmail || '';
+  const checkoutTitle = isCustomerMode ? 'Checkout with Points' : 'Buy Points Checkout';
+  const checkoutSubtitle = isCustomerMode
+    ? 'Scan items, add manual products, and redeem points'
+    : 'Scan items, add manual products, and purchase points for checkout';
+  const headerTitle = customer?.name || (isCustomerMode ? 'Customer checkout' : 'Non-customer checkout');
+  const headerSubtitle = isCustomerMode
+    ? `Available: ${availablePoints} pts | Remaining: ${remainingPoints} pts`
+    : `Buy-points user: ${buyPointsEmail || 'Not configured'} | Points required: ${pointsToBuy} pts`;
 
-  if (!customer) {
+  if (isCustomerMode && !customer) {
     return (
-      <ScreenShell title="Checkout with Points" subtitle={error || 'Loading checkout data...'} onBack={pop} backgroundColor="#ffe4e1">
+      <ScreenShell title={checkoutTitle} subtitle={error || 'Loading checkout data...'} onBack={pop} backgroundColor="#ffe4e1">
         <Text>{error || 'Loading...'}</Text>
       </ScreenShell>
     );
@@ -94,7 +131,7 @@ export const CheckoutScreen = ({ pop, customerEmail }) => {
     setNotice('');
 
     try {
-      const product = await withLoader(findProductByQrCode(customerEmail, code), 'Finding product...');
+      const product = await withLoader(findProductByQrCode(checkoutLookupEmail, code), 'Finding product...');
 
       if (!product) {
         setNotice('Product not found.');
@@ -145,6 +182,7 @@ export const CheckoutScreen = ({ pop, customerEmail }) => {
     ]);
     setManualName('');
     setManualPoints('');
+    setManualModalVisible(false);
     setNotice(`Added "${name}" to cart.`);
   };
 
@@ -171,15 +209,17 @@ export const CheckoutScreen = ({ pop, customerEmail }) => {
     try {
       setSubmitting(true);
       const order = await withLoader(
-        placeCustomerOrder({
-          email: customer.email,
+        placeSwapCheckoutOrder({
+          mode,
+          email: customer?.email || customerEmail || '',
           items: cartItems,
           paymentMethod: selectedPaymentMethod,
-          subscribeId:
-            customer.customerSubscribe?.shop_subscribe?.id ||
-            customer.customerSubscribe?.subscribe?.id ||
-            customer.customerSubscribe?.event_subscribe?.id ||
-            '',
+          subscribeId: isCustomerMode
+            ? customer?.customerSubscribe?.shop_subscribe?.id ||
+              customer?.customerSubscribe?.subscribe?.id ||
+              customer?.customerSubscribe?.event_subscribe?.id ||
+              ''
+            : '',
         }),
         'Placing order...'
       );
@@ -199,8 +239,8 @@ export const CheckoutScreen = ({ pop, customerEmail }) => {
   };
 
   return (
-    <ScreenShell title="Checkout with Points" subtitle="Scan items, add manual products, and redeem points" onBack={pop} backgroundColor="#ffe4e1">
-      <Card title={customer.name} subtitle={`Available: ${availablePoints} pts | Remaining: ${remainingPoints} pts`} />
+    <ScreenShell title={checkoutTitle} subtitle={checkoutSubtitle} onBack={pop} backgroundColor="#ffe4e1">
+      {isCustomerMode ? <Card title={headerTitle} subtitle={headerSubtitle} /> : null}
 
       <View style={styles.scannerCard}>
         <Text style={styles.cardTitle}>QR Code Scanner</Text>
@@ -218,27 +258,16 @@ export const CheckoutScreen = ({ pop, customerEmail }) => {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.formCard}>
-        <Text style={styles.cardTitle}>Add Product Manually</Text>
-        <TextInput
-          value={manualName}
-          onChangeText={setManualName}
-          style={styles.input}
-          placeholder="Product name"
-          placeholderTextColor="#8b8b8b"
-        />
-        <TextInput
-          value={manualPoints}
-          onChangeText={setManualPoints}
-          style={styles.input}
-          placeholder="Points"
-          placeholderTextColor="#8b8b8b"
-          keyboardType="numeric"
-        />
-        <TouchableOpacity onPress={handleManualAdd} style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>Add Manual Product</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        onPress={() => {
+          setManualName('');
+          setManualPoints('');
+          setManualModalVisible(true);
+        }}
+        style={styles.secondaryButton}
+      >
+        <Text style={styles.secondaryButtonText}>Add Product Manually</Text>
+      </TouchableOpacity>
 
       <Card title="Cart" subtitle={`${cartItems.length} item${cartItems.length === 1 ? '' : 's'} in cart`} />
       {cartItems.length === 0 ? (
@@ -269,12 +298,18 @@ export const CheckoutScreen = ({ pop, customerEmail }) => {
         </View>
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Available</Text>
-          <Text style={styles.rowValue}>{availablePoints} pts</Text>
+          <Text style={styles.rowValue}>{isCustomerMode ? `${availablePoints} pts` : '0 pts'}</Text>
         </View>
         <View style={styles.row}>
-          <Text style={styles.rowLabel}>Remaining</Text>
-          <Text style={styles.rowValue}>{remainingPoints} pts</Text>
+          <Text style={styles.rowLabel}>{isCustomerMode ? 'Remaining' : 'Points to Buy'}</Text>
+          <Text style={styles.rowValue}>{isCustomerMode ? `${remainingPoints} pts` : `${pointsToBuy} pts`}</Text>
         </View>
+        {cashPayable > 0 ? (
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Cash Payable</Text>
+            <Text style={styles.rowValue}>${cashPayable.toFixed(2)}</Text>
+          </View>
+        ) : null}
       </View>
 
       <TouchableOpacity onPress={openPaymentModal} style={styles.primaryButton}>
@@ -283,37 +318,53 @@ export const CheckoutScreen = ({ pop, customerEmail }) => {
 
       <Modal transparent visible={paymentModalVisible} animationType="fade" onRequestClose={() => setPaymentModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', justifyContent: 'center', padding: 20 }}>
+          <CheckoutPaymentSelector
+            paymentOptions={PAYMENT_OPTIONS}
+            selectedMode={selectedPaymentMethod}
+            onSelectMode={setSelectedPaymentMethod}
+            onConfirm={handlePlaceOrder}
+            onCancel={() => {
+              setPaymentModalVisible(false);
+              setSelectedPaymentMethod('');
+            }}
+            submitting={submitting}
+            confirmLabel="Place Order"
+          />
+        </View>
+      </Modal>
+
+      <Modal transparent visible={manualModalVisible} animationType="fade" onRequestClose={() => setManualModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', justifyContent: 'center', padding: 20 }}>
           <View style={[styles.formCard, { gap: 14 }]}>
-            <Text style={styles.cardTitle}>Select Payment Mode</Text>
-            <Text style={styles.helperText}>Choose a payment mode first. You can cancel this dialog to add or remove items.</Text>
-            <View style={styles.chipRow}>
-              {PAYMENT_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option.id}
-                  onPress={() => setSelectedPaymentMethod(option.id)}
-                  style={[styles.chip, selectedPaymentMethod === option.id && styles.chipActive]}
-                >
-                  <Text style={styles.chipText}>{option.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <Text style={styles.cardTitle}>Add Product Manually</Text>
+            <TextInput
+              value={manualName}
+              onChangeText={setManualName}
+              style={styles.input}
+              placeholder="Product name"
+              placeholderTextColor="#8b8b8b"
+            />
+            <TextInput
+              value={manualPoints}
+              onChangeText={setManualPoints}
+              style={styles.input}
+              placeholder="Points"
+              placeholderTextColor="#8b8b8b"
+              keyboardType="numeric"
+            />
             <View style={styles.row}>
               <TouchableOpacity
                 onPress={() => {
-                  setPaymentModalVisible(false);
-                  setSelectedPaymentMethod('');
+                  setManualModalVisible(false);
+                  setManualName('');
+                  setManualPoints('');
                 }}
                 style={[styles.secondaryButton, { flex: 1 }]}
-                disabled={submitting}
               >
                 <Text style={styles.secondaryButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handlePlaceOrder}
-                style={[styles.primaryButton, { flex: 1 }, (!selectedPaymentMethod || submitting) && styles.primaryButtonDisabled]}
-                disabled={!selectedPaymentMethod || submitting}
-              >
-                <Text style={styles.primaryButtonText}>{submitting ? 'Placing...' : 'Place Order'}</Text>
+              <TouchableOpacity onPress={handleManualAdd} style={[styles.primaryButton, { flex: 1 }]}>
+                <Text style={styles.primaryButtonText}>Add Product</Text>
               </TouchableOpacity>
             </View>
           </View>

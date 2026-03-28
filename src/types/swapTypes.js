@@ -259,6 +259,18 @@
  */
 
 /**
+ * @typedef {'customer' | 'nonCustomer'} SwapCheckoutMode
+ */
+
+/**
+ * @typedef {{ email: string, customerId: string, token: string }} SwapCheckoutAuthContext
+ */
+
+/**
+ * @typedef {{ subscribeId: string, response: Record<string, unknown> }} SwapPointsPurchaseResult
+ */
+
+/**
  * @typedef {{
  *   subscribe_id_c: string,
  *   customer_address_id_c?: string,

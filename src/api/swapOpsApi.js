@@ -35,7 +35,14 @@ import {
   mutateBooth,
   mutateBoothProduct,
 } from './boothGraphqlApi';
-import { getCachedStoredAppSession, getStoredShopToken } from '../store/appSessionStorage';
+import {
+  getCachedStoredAppSession,
+  getStoredBuyPointsCustomerId,
+  getStoredBuyPointsEmail,
+  getStoredBuyPointsToken,
+  getStoredShopToken,
+} from '../store/appSessionStorage';
+import { buildCheckoutPointsSubscriptionPayload, getPointsSubscription } from '../services/checkoutPricingService';
 import { buildBoothProductCode, extractBoothProductIdFromCode } from '../utils/boothProductCode';
 
 /**
@@ -53,7 +60,7 @@ const BOOTH_USE_MOCK = (process.env.EXPO_PUBLIC_BOOTH_USE_MOCK || process.env.EX
 const APP_LOGIN_PATH = 'guests/customers/get-started';
 const APP_GUEST_REGISTER_PATH = 'guests/register';
 const APP_LOGIN_TENANCY = 'SWAP.AUTH.TYPE.EMAIL';
-const SWAP_ORDER_CREATE_PATH = 'orders/init';
+const SWAP_ORDER_CREATE_PATH = 'orders/save/shop';
 const EMPTY_ARRAY = [];
 const customerSessionCache = new Map();
 let boothProductsStore = mockBoothProducts.map((product) => ({ ...product }));
@@ -434,12 +441,12 @@ const buildUrl = (path, withVersion = true) => {
 
 const buildWalletUrl = (path) => `${SWAP_WALLET_API_URL}/${path.replace(/^\//, '')}`;
 
-const withSwapAuthHeader = async (headers = {}) => {
+const withSwapAuthHeader = async (headers = {}, authToken = '') => {
   if (headers.Authorization) {
     return headers;
   }
 
-  const token = getCachedStoredAppSession()?.shopToken || (await getStoredShopToken());
+  const token = authToken || getCachedStoredAppSession()?.shopToken || (await getStoredShopToken());
   return token ? { ...headers, Authorization: `Bearer ${token}` } : headers;
 };
 
@@ -450,11 +457,11 @@ const withSwapAuthHeader = async (headers = {}) => {
  * @param {boolean} [withVersion=true]
  * @returns {Promise<Record<string, unknown>>}
  */
-const postJson = async (path, body, withVersion = true, extraHeaders = {}) => {
+const postJson = async (path, body, withVersion = true, extraHeaders = {}, authToken = '') => {
   const headers = await withSwapAuthHeader({
     'Content-Type': 'application/json',
     ...extraHeaders,
-  });
+  }, authToken);
 
   const response = await fetch(buildUrl(path, withVersion), {
     method: 'POST',
@@ -470,8 +477,8 @@ const postJson = async (path, body, withVersion = true, extraHeaders = {}) => {
   return response.json();
 };
 
-const getJson = async (url, headers = {}) => {
-  const requestHeaders = await withSwapAuthHeader(headers);
+const getJson = async (url, headers = {}, authToken = '') => {
+  const requestHeaders = await withSwapAuthHeader(headers, authToken);
   const response = await fetch(url, {
     method: 'GET',
     headers: requestHeaders,
@@ -541,8 +548,8 @@ const assertSwapSuccess = (response) => {
  * @param {boolean} [withVersion=true]
  * @returns {Promise<Record<string, unknown>>}
  */
-const postFormData = async (path, formData, withVersion = true) => {
-  const headers = await withSwapAuthHeader();
+const postFormData = async (path, formData, withVersion = true, authToken = '') => {
+  const headers = await withSwapAuthHeader({}, authToken);
   const response = await fetch(buildUrl(path, withVersion), {
     method: 'POST',
     headers,
@@ -849,6 +856,98 @@ export const authenticateCustomer = async (email) => {
   return createCustomerSession(email);
 };
 
+const toPointsValue = (value) => {
+  const parsed = Number.parseInt(String(value || '0').replace(/[^\d-]/g, ''), 10);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const getCheckoutEligibleItems = (items = []) => items.filter((item) => item?.id && !String(item.id).startsWith('manual-'));
+
+const getCheckoutSubscribeIdFromProfile = (profile) =>
+  profile?.customerSubscribe?.shop_subscribe?.id ||
+  profile?.customerSubscribe?.subscribe?.id ||
+  profile?.customerSubscribe?.event_subscribe?.id ||
+  '';
+
+const extractCheckoutSubscribeId = (response) => {
+  const data = getResponseData(response);
+  return (
+    data?.subscribe_id_c ||
+    data?.subscription_id_c ||
+    data?.subscribe?.id ||
+    data?.subscription?.id ||
+    data?.id ||
+    ''
+  );
+};
+
+const resolveBuyPointsSession = async () => {
+  const cachedSession = getCachedStoredAppSession();
+  const storedEmail = cachedSession?.buyPointsEmail || (await getStoredBuyPointsEmail());
+  const normalizedEmail = String(storedEmail || '').trim().toLowerCase();
+  const storedToken = cachedSession?.buyPointsToken || (await getStoredBuyPointsToken());
+  const storedCustomerId = cachedSession?.buyPointsCustomerId || (await getStoredBuyPointsCustomerId());
+
+  if (!normalizedEmail) {
+    throw new Error('EXPO_PUBLIC_SWAP_BUY_POINTS_EMAIL is not configured.');
+  }
+
+  if (storedToken && storedCustomerId) {
+    return {
+      email: normalizedEmail,
+      token: storedToken,
+      customerId: storedCustomerId,
+    };
+  }
+
+  const loginResponse = await loginAsCustomer(normalizedEmail);
+  const token = loginResponse?.token || '';
+  const customerId = loginResponse?.customer?.id || '';
+
+  if (!token || !customerId) {
+    throw new Error('Failed to resolve buy-points user session.');
+  }
+
+  return {
+    email: normalizedEmail,
+    token,
+    customerId,
+  };
+};
+
+const buyPointsForCheckout = async ({ requiredPoints, paymentMethod, authToken, customerId }) => {
+  if (requiredPoints <= 0) {
+    throw new Error('Required points must be greater than zero.');
+  }
+
+  const subscriptions = await getShopPointsSubscriptions(authToken);
+  const subscription = getPointsSubscription(subscriptions);
+
+  if (!subscription?.id) {
+    throw new Error('No shop points subscription is available for checkout.');
+  }
+
+  const payableSubscription = buildCheckoutPointsSubscriptionPayload(subscription, requiredPoints).subscription;
+
+  const response = await saveShopSubscription({
+    paymentMode: paymentMethod,
+    srUserId: customerId,
+    subscription: payableSubscription,
+    authToken,
+  });
+  assertSwapSuccess(response);
+
+  const subscribeId = extractCheckoutSubscribeId(response);
+  if (!subscribeId) {
+    throw new Error('Buy points response did not include a subscribe id.');
+  }
+
+  return {
+    subscribeId,
+    response,
+  };
+};
+
 /**
  * Get customer orders.
  * @param {string} email
@@ -873,7 +972,7 @@ export const getCustomerOrders = async (email) => {
  * @param {import('../types/swapTypes').SwapOrderCreateRequest} orderData
  * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<import('../types/swapTypes').SwapOrderCreateResponseData>>}
  */
-export const createSwapOrder = async (orderData) => {
+export const createSwapOrder = async (orderData, authToken = '') => {
   if (SWAP_USE_MOCK) {
     await delay();
 
@@ -938,7 +1037,7 @@ export const createSwapOrder = async (orderData) => {
     });
   }
 
-  return postJson(SWAP_ORDER_CREATE_PATH, orderData);
+  return postJson(SWAP_ORDER_CREATE_PATH, orderData, true, authToken ? { Authorization: `Bearer ${authToken}` } : {}, authToken);
 };
 
 /**
@@ -946,61 +1045,121 @@ export const createSwapOrder = async (orderData) => {
  * @param {{ email: string, items: Array<{ id?: string, name?: string, sku?: string, points?: string | number }>, paymentMethod: 'cash' | 'card' | 'paynow', subscribeId?: string }} orderData
  * @returns {Promise<import('../types/swapTypes').SwapCustomerOrder>}
  */
-export const placeCustomerOrder = async ({ email, items = [], paymentMethod, subscribeId = '' }) => {
-  const eligibleItems = items.filter((item) => item?.id && !String(item.id).startsWith('manual-'));
+export const placeSwapCheckoutOrder = async ({
+  mode = 'customer',
+  email = '',
+  items = [],
+  paymentMethod,
+  subscribeId = '',
+}) => {
+  const eligibleItems = getCheckoutEligibleItems(items);
+  const totalPoints = (items || []).reduce((sum, item) => sum + toPointsValue(item?.points), 0);
 
-  if (subscribeId && eligibleItems.length === items.length && eligibleItems.length > 0) {
-    const response = await createSwapOrder({
-      subscribe_id_c: subscribeId,
-      customer_address_id_c: '',
-      items: eligibleItems.map((item) => ({
-        id: item.id,
-        evaluated_points_c: String(Number.parseInt(String(item.points || '0').replace(/[^\d-]/g, ''), 10) || 0),
-      })),
-      customer_address: '.',
-    });
+  if (eligibleItems.length !== items.length || eligibleItems.length === 0) {
+    if (!SWAP_USE_MOCK) {
+      throw new Error('Checkout requires catalog items with valid ids. Manual-only rows cannot be submitted.');
+    }
 
-    const data = assertSwapSuccess(response);
-    const createdOrder = data?.order;
-    const totalPoints = Number.parseInt(createdOrder?.order_cost_c || '0', 10) || 0;
-    const itemCount = Number.parseInt(createdOrder?.total_items_c || '0', 10) || eligibleItems.length;
-
-    return {
-      id: createdOrder?.unique_id_c || createdOrder?.id || `ORD-${Date.now()}`,
-      status: createdOrder?.status_c || 'Placed',
-      date: createdOrder?.order_date_c || new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date()),
+    await delay();
+    const itemCount = items.length;
+    const order = {
+      id: `ORD-${8128 + customerOrdersStore.length}`,
+      status: 'Placed',
+      date: new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date()),
       itemCount: `${itemCount} item${itemCount === 1 ? '' : 's'}`,
       total: `${totalPoints} pts`,
       paymentMethod,
       email,
     };
+
+    customerOrdersStore = [order, ...customerOrdersStore];
+    return order;
   }
 
-  if (!SWAP_USE_MOCK) {
-    throw new Error('Swap order placement requires product ids and a subscribe id.');
+  let resolvedEmail = email;
+  let resolvedSubscribeId = subscribeId;
+  let authToken = '';
+  let availablePoints = 0;
+  let customerId = '';
+
+  if (mode === 'customer') {
+    const session = await authenticateCustomer(email);
+    const profile = session?.profile || null;
+    resolvedEmail = session?.email || email;
+    customerId = session?.loginResponse?.customer?.id || '';
+    authToken = session?.loginResponse?.token || '';
+    availablePoints = toPointsValue(profile?.points || profile?.total_available_points_c || '0');
+
+    if (!resolvedSubscribeId) {
+      resolvedSubscribeId = getCheckoutSubscribeIdFromProfile(profile);
+    }
+
+    const requiredTopUpPoints = Math.max(totalPoints - availablePoints, 0);
+    if (requiredTopUpPoints > 0) {
+      const purchase = await buyPointsForCheckout({
+        requiredPoints: requiredTopUpPoints,
+        paymentMethod,
+        authToken,
+        customerId,
+      });
+      resolvedSubscribeId = purchase.subscribeId;
+    }
+  } else {
+    const buyPointsSession = await resolveBuyPointsSession();
+    resolvedEmail = buyPointsSession.email;
+    customerId = buyPointsSession.customerId;
+    authToken = buyPointsSession.token;
+
+    const purchase = await buyPointsForCheckout({
+      requiredPoints: totalPoints,
+      paymentMethod,
+      authToken,
+      customerId,
+    });
+    resolvedSubscribeId = purchase.subscribeId;
   }
 
-  await delay();
+  if (!resolvedSubscribeId) {
+    throw new Error('Checkout could not resolve a subscribe id.');
+  }
 
-  const totalPoints = (items || []).reduce((sum, item) => {
-    const value = Number.parseInt(String(item?.points || '0').replace(/[^\d-]/g, ''), 10);
-    return sum + (Number.isNaN(value) ? 0 : value);
-  }, 0);
+  const response = await createSwapOrder(
+    {
+      subscribe_id_c: resolvedSubscribeId,
+      customer_address_id_c: '',
+      items: eligibleItems.map((item) => ({
+        id: item.id,
+        evaluated_points_c: String(toPointsValue(item.points)),
+      })),
+      customer_address: '.',
+    },
+    authToken
+  );
 
-  const itemCount = items.length;
-  const order = {
-    id: `ORD-${8128 + customerOrdersStore.length}`,
-    status: 'Placed',
-    date: new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date()),
+  const data = assertSwapSuccess(response);
+  const createdOrder = data?.order;
+  const itemCount = Number.parseInt(createdOrder?.total_items_c || '0', 10) || eligibleItems.length;
+  const resolvedTotalPoints = Number.parseInt(createdOrder?.order_cost_c || '0', 10) || totalPoints;
+
+  return {
+    id: createdOrder?.unique_id_c || createdOrder?.id || `ORD-${Date.now()}`,
+    status: createdOrder?.status_c || 'Placed',
+    date: createdOrder?.order_date_c || new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date()),
     itemCount: `${itemCount} item${itemCount === 1 ? '' : 's'}`,
-    total: `${totalPoints} pts`,
+    total: `${resolvedTotalPoints} pts`,
     paymentMethod,
-    email,
+    email: resolvedEmail,
   };
-
-  customerOrdersStore = [order, ...customerOrdersStore];
-  return order;
 };
+
+export const placeCustomerOrder = async ({ email, items = [], paymentMethod, subscribeId = '' }) =>
+  placeSwapCheckoutOrder({
+    mode: 'customer',
+    email,
+    items,
+    paymentMethod,
+    subscribeId,
+  });
 
 /**
  * Get customer subscriptions.
@@ -1203,13 +1362,13 @@ export const reviewProduct = async ({ productId, action, notes = '', reviewedBy 
  * @param {import('../types/swapTypes').SwapSubscriptionTenancy} tenancy
  * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<Record<string, unknown>> | Record<string, unknown>>}
  */
-export const getSubscriptionsList = async (tenancy = 'SWAP.SUB.TYPE.ITEMS.STORE') => {
+export const getSubscriptionsList = async (tenancy = 'SWAP.SUB.TYPE.ITEMS.STORE', authToken = '') => {
   if (SWAP_USE_MOCK) {
     await delay();
     return toMockSubscriptionListResponse(tenancy);
   }
 
-  return postJson('subscriptions/list', { tenancy });
+  return postJson('subscriptions/list', { tenancy }, true, {}, authToken);
 };
 
 export const getAllSubscriptions = async () => {
@@ -1227,8 +1386,8 @@ export const getAllSubscriptions = async () => {
   return Array.from(uniqueById.values());
 };
 
-export const getShopPointsSubscriptions = async () => {
-  const response = await getSubscriptionsList('SWAP.SUB.TYPE.POINTS.SHOP');
+export const getShopPointsSubscriptions = async (authToken = '') => {
+  const response = await getSubscriptionsList('SWAP.SUB.TYPE.POINTS.SHOP', authToken);
   return getResponseData(response).subscriptions || EMPTY_ARRAY;
 };
 
@@ -1289,7 +1448,8 @@ export const saveShopSubscription = async ({
       auto_renew_c: autoRenew,
     },
     true,
-    authToken ? { Authorization: `Bearer ${authToken}` } : {}
+    authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    authToken
   );
 };
 
