@@ -209,6 +209,41 @@ export const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 12, color: '#64748b', marginTop: 2 },
   content: { padding: 16, gap: 12 },
   tabsRow: { flexDirection: 'row', gap: 10 },
+  tabsBar: {
+    marginHorizontal: -16,
+    marginTop: -16,
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  tabsBarAlt: {
+    marginHorizontal: -16,
+    marginTop: -16,
+    backgroundColor: '#1e293b',
+    paddingVertical: 8,
+  },
+  tabsBarScrollContent: {
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  tabsBarButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  tabsBarButtonActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  tabsBarButtonText: {
+    color: '#cbd5e1',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  tabsBarButtonTextActive: {
+    color: '#ffffff',
+  },
   tabButton: {
     flex: 1,
     paddingVertical: 14,
@@ -390,6 +425,7 @@ export const styles = StyleSheet.create({
     backgroundColor: '#0f172a',
     borderRadius: 12,
     paddingVertical: 14,
+    paddingHorizontal: 14,
     alignItems: 'center',
   },
   primaryButtonDisabled: { backgroundColor: '#cbd5e1' },
@@ -400,6 +436,7 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#94a3b8',
     paddingVertical: 14,
+    paddingHorizontal: 14,
     alignItems: 'center',
   },
   secondaryButtonText: { color: '#0f172a', fontWeight: '700' },
@@ -688,5 +725,44 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#334155',
     textAlign: 'center',
+  },
+  checkoutSummaryCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(72, 141, 61, 0.22)',
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+  },
+  checkoutSummaryHeader: {
+    backgroundColor: 'rgba(72, 141, 61, 0.67)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  checkoutSummaryHeaderText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  checkoutSummaryBody: {
+    backgroundColor: 'rgba(72, 141, 61, 0.12)',
+    padding: 12,
+    gap: 10,
+  },
+  checkoutList: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+  },
+  checkoutListItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  checkoutListItemLast: {
+    borderBottomWidth: 0,
   },
 });
