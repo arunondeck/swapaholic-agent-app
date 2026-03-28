@@ -42,7 +42,7 @@ const ACTION_TEXT_STYLES = {
   neutral: styles.cartItemRemoveText,
 };
 
-export const SwapProductItemWithActions = ({ product, actions = [] }) => {
+export const SwapProductItemWithActions = ({ product, actions = [], metaLines = [] }) => {
   const thumbnail =
     product?.thumbnail ||
     product?.image ||
@@ -65,6 +65,11 @@ export const SwapProductItemWithActions = ({ product, actions = [] }) => {
               <Text style={styles.cartItemName}>{name}</Text>
               {!!sku && <Text style={styles.cartItemMeta}>ID: {sku}</Text>}
               <Text style={styles.cartItemMeta}>{[size && `Size: ${size}`, brand && `Brand: ${brand}`].filter(Boolean).join(' | ')}</Text>
+              {metaLines.map((line) => (
+                <Text key={line} style={styles.cartItemMeta}>
+                  {line}
+                </Text>
+              ))}
             </View>
           </View>
           <View style={styles.cartItemPriceColumn}>

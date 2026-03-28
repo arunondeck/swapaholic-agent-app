@@ -1,49 +1,40 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Text } from 'react-native';
-import { getCustomerProfile, getCustomerSwappedInItems } from '../../api/swapOpsApi';
 import { ProductCard } from '../../components/ProductCard';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
+import { useSwapStore } from '../../store/swapStore';
 
 export const CustomerSwappedInScreen = ({ pop, customerEmail }) => {
-  const [customer, setCustomer] = useState(null);
-  const [items, setItems] = useState([]);
-  const [error, setError] = useState('');
   const { withLoader } = useLoader();
+  const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
+  const swappedInItemsEntry = useSwapStore((state) => state.currentCustomerData.swappedInItems);
+  const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
+  const fetchCustomerSwappedInItemsIfNeeded = useSwapStore((state) => state.fetchCustomerSwappedInItemsIfNeeded);
+  const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
+  const customer = profileEntry.data;
+  const items = Array.isArray(swappedInItemsEntry.data) ? swappedInItemsEntry.data : [];
+  const error = profileEntry.error || swappedInItemsEntry.error || '';
 
   useEffect(() => {
-    let active = true;
-
     const loadData = async () => {
+      const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
+      const swappedItemsPromise = fetchCustomerSwappedInItemsIfNeeded(customerEmail);
+      const hasUsableCache = canUseCache(profileEntry) && canUseCache(swappedInItemsEntry);
+
       try {
-        setError('');
-        const [profile, swappedInItems] = await withLoader(
-          Promise.all([
-            getCustomerProfile(customerEmail),
-            getCustomerSwappedInItems(customerEmail),
-          ]),
-          'Loading swapped items...'
-        );
-
-        if (!active) {
-          return;
+        if (hasUsableCache) {
+          await Promise.all([profilePromise, swappedItemsPromise]);
+        } else {
+          await withLoader(Promise.all([profilePromise, swappedItemsPromise]), 'Loading swapped items...');
         }
-
-        setCustomer(profile);
-        setItems(swappedInItems);
-      } catch (loadError) {
-        if (active) {
-          setError(loadError.message || 'Failed to load swapped-in items');
-        }
+      } catch {
+        // Store entries capture fetch errors for rendering.
       }
     };
 
     loadData();
-
-    return () => {
-      active = false;
-    };
-  }, [customerEmail, withLoader]);
+  }, [canUseCache, customerEmail, fetchCustomerProfileIfNeeded, fetchCustomerSwappedInItemsIfNeeded, profileEntry, swappedInItemsEntry, withLoader]);
 
   if (!customer) {
     return (

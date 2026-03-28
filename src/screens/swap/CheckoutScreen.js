@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { findProductByQrCode, getCustomerCheckoutCart, getCustomerProfile, placeSwapCheckoutOrder } from '../../api/swapOpsApi';
+import { findProductByQrCode, getCustomerCheckoutCart, placeSwapCheckoutOrder } from '../../api/swapOpsApi';
 import { Card } from '../../components/Card';
 import { CheckoutPaymentSelector } from '../../components/CheckoutPaymentSelector';
 import { ScreenShell } from '../../components/ScreenShell';
@@ -48,6 +48,10 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
   const buyPointsEmail = useAppSessionStore((state) => state.buyPointsEmail);
   const shopPointsSubscriptions = useSwapStore((state) => state.shopPointsSubscriptions);
   const fetchShopPointsSubscriptions = useSwapStore((state) => state.fetchShopPointsSubscriptions);
+  const invalidateCustomerCache = useSwapStore((state) => state.invalidateCustomerCache);
+  const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
+  const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
+  const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
   const isCustomerMode = mode === 'customer';
 
   useEffect(() => {
@@ -62,7 +66,11 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
           return;
         }
 
-        const [profile, checkoutCart] = await withLoader(Promise.all([getCustomerProfile(customerEmail), getCustomerCheckoutCart(customerEmail)]), 'Loading checkout...');
+        const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
+        const checkoutCartPromise = getCustomerCheckoutCart(customerEmail);
+        const [profile, checkoutCart] = canUseCache(profileEntry)
+          ? await Promise.all([profilePromise, checkoutCartPromise])
+          : await withLoader(Promise.all([profilePromise, checkoutCartPromise]), 'Loading checkout...');
 
         if (!active) {
           return;
@@ -82,7 +90,7 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
     return () => {
       active = false;
     };
-  }, [customerEmail, isCustomerMode, withLoader]);
+  }, [canUseCache, customerEmail, fetchCustomerProfileIfNeeded, isCustomerMode, profileEntry, withLoader]);
 
   useEffect(() => {
     fetchShopPointsSubscriptions().catch(() => null);
@@ -224,6 +232,7 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
         'Placing order...'
       );
 
+      invalidateCustomerCache(['orders', 'orderDetailsById', 'profile']);
       setCartItems([]);
       setPaymentModalVisible(false);
       setSelectedPaymentMethod('');

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { getCustomerProfile, saveShopSubscription } from '../../api/swapOpsApi';
+import { saveShopSubscription } from '../../api/swapOpsApi';
 import { Card } from '../../components/Card';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
@@ -21,7 +21,6 @@ const parseWholeNumber = (value) => {
 };
 
 export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
-  const [customer, setCustomer] = useState(null);
   const [itemCountInput, setItemCountInput] = useState('1');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -32,43 +31,36 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
   const shopItemsSubscriptions = useSwapStore((state) => state.shopItemsSubscriptions);
   const fetchShopSubscriptions = useSwapStore((state) => state.fetchShopSubscriptions);
   const activeCustomer = useSwapStore((state) => state.activeCustomer);
+  const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
+  const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
+  const invalidateCustomerCache = useSwapStore((state) => state.invalidateCustomerCache);
+  const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
   const shopCustomerId = useAppSessionStore((state) => state.shopCustomerId);
+  const customer = profileEntry.data;
 
   useEffect(() => {
-    let active = true;
-
     const loadData = async () => {
+      const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
+      const subscriptionsPromise = shopItemsSubscriptions.length
+        ? Promise.resolve(shopItemsSubscriptions)
+        : fetchShopSubscriptions().then((data) => data.shopItemsSubscriptions);
+      const hasUsableCache = canUseCache(profileEntry) && shopItemsSubscriptions.length > 0;
+
       try {
         setError('');
-        const [profile, subscriptions] = await withLoader(
-          Promise.all([
-            getCustomerProfile(customerEmail),
-            shopItemsSubscriptions.length ? Promise.resolve(shopItemsSubscriptions) : fetchShopSubscriptions().then((data) => data.shopItemsSubscriptions),
-          ]),
-          'Loading subscription options...'
-        );
-
-        if (!active) {
-          return;
-        }
-
-        setCustomer(profile);
+        const [, subscriptions] = hasUsableCache
+          ? await Promise.all([profilePromise, subscriptionsPromise])
+          : await withLoader(Promise.all([profilePromise, subscriptionsPromise]), 'Loading subscription options...');
         if (!subscriptions?.length) {
           setError('No item subscription is available right now.');
         }
       } catch (loadError) {
-        if (active) {
-          setError(loadError.message || 'Failed to load subscription data');
-        }
+        setError(loadError.message || 'Failed to load subscription data');
       }
     };
 
     loadData();
-
-    return () => {
-      active = false;
-    };
-  }, [customerEmail, fetchShopSubscriptions, shopItemsSubscriptions, withLoader]);
+  }, [canUseCache, customerEmail, fetchCustomerProfileIfNeeded, fetchShopSubscriptions, profileEntry, shopItemsSubscriptions, withLoader]);
 
   const itemCount = useMemo(() => parseWholeNumber(itemCountInput), [itemCountInput]);
   const paymentSummary = useMemo(
@@ -85,7 +77,7 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
 
   if (!customer) {
     return (
-      <ScreenShell title="Buy Subscription" subtitle={error || 'Loading subscription options...'} onBack={pop} backgroundColor="#ffe4e1">
+      <ScreenShell title="Buy Flexi Plan" subtitle={error || 'Loading subscription options...'} onBack={pop} backgroundColor="#ffe4e1">
         <Text>{error || 'Loading...'}</Text>
       </ScreenShell>
     );
@@ -140,6 +132,7 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
         'Saving subscription purchase...'
       );
 
+      invalidateCustomerCache(['profile', 'activePackage', 'subscriptions', 'subscriptionDetailsById']);
       setPaymentModalVisible(false);
       setSelectedPaymentMethod('');
       setNotice('Subscription purchased successfully.');
@@ -151,7 +144,7 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
   };
 
   return (
-    <ScreenShell title="Buy Subscription" subtitle={`Purchase flow for ${customer.name}`} onBack={pop} backgroundColor="#ffe4e1">
+    <ScreenShell title="Buy Flexi Plan" subtitle={`Purchase flexi plan for ${customer.name}`} onBack={pop} backgroundColor="#ffe4e1">
       <Card title="Flexi Swap Shopper" subtitle={selectedSubscription?.name || 'Buy Items'} />
       <Text style={styles.selectLabel}>Number of items</Text>
       <TextInput

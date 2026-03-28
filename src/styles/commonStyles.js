@@ -1,5 +1,26 @@
 import { StyleSheet } from 'react-native';
 
+const DEFAULT_SWAP_PRODUCT_IMAGE_ASPECT_RATIO = 250 / 354;
+
+const parseAspectRatio = (value) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    return DEFAULT_SWAP_PRODUCT_IMAGE_ASPECT_RATIO;
+  }
+
+  if (normalized.includes('/')) {
+    const [widthValue, heightValue] = normalized.split('/').map((part) => Number.parseFloat(part.trim()));
+    if (Number.isFinite(widthValue) && Number.isFinite(heightValue) && widthValue > 0 && heightValue > 0) {
+      return widthValue / heightValue;
+    }
+  }
+
+  const numericValue = Number.parseFloat(normalized);
+  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : DEFAULT_SWAP_PRODUCT_IMAGE_ASPECT_RATIO;
+};
+
+const SWAP_PRODUCT_IMAGE_ASPECT_RATIO = parseAspectRatio(process.env.EXPO_PUBLIC_SWAP_PRODUCT_IMAGE_ASPECT_RATIO);
+
 export const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#f4f5f7' },
   summaryCard: {
@@ -468,14 +489,30 @@ export const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    padding: 14,
+    padding: 12,
     gap: 12,
-    marginBottom: 10,
+    marginBottom: 8,
     flexDirection: 'row',
   },
-  itemImage: { width: 76, height: 76, borderRadius: 12, backgroundColor: '#e5e7eb' },
-  itemDetails: { flex: 1, gap: 6 },
+  itemImage: {
+    width: 75,
+    aspectRatio: SWAP_PRODUCT_IMAGE_ASPECT_RATIO,
+    borderRadius: 12,
+    backgroundColor: '#e5e7eb',
+    marginLeft: -12,
+    marginTop: -12,
+    marginBottom: -12,
+  },
+  itemDetails: { flex: 1, gap: 4, marginTop: -2 },
+  itemEyebrow: {
+    fontSize: 10,
+    color: '#6b7280',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    marginBottom: -4
+  },
   itemMeta: { fontSize: 13, color: '#475569' },
+  itemPrice: { fontSize: 15, color: '#111827', fontWeight: '700', flex: 1, justifyContent: 'center' },
   cartItemRow: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -568,6 +605,7 @@ export const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   chipActive: { borderColor: '#0f766e', backgroundColor: '#f0fdfa' },
+  paginationChipDisabled: { opacity: 0.45 },
   chipText: { fontSize: 13, fontWeight: '600', color: '#334155' },
   scannerCard: {
     backgroundColor: '#ecfeff',

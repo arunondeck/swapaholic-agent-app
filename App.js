@@ -22,6 +22,7 @@ import { ApprovalScreen } from './src/screens/swap/ApprovalScreen';
 import { BuySubscriptionScreen } from './src/screens/swap/BuySubscriptionScreen';
 import { CheckoutScreen } from './src/screens/swap/CheckoutScreen';
 import { CustomerItemEntryScreen } from './src/screens/swap/CustomerItemEntryScreen';
+import { CustomerOrderDetailScreen } from './src/screens/swap/CustomerOrderDetailScreen';
 import { CustomerOrdersScreen } from './src/screens/swap/CustomerOrdersScreen';
 import { CustomerOverviewScreen } from './src/screens/swap/CustomerOverviewScreen';
 import { CustomerPickupDetailScreen } from './src/screens/swap/CustomerPickupDetailScreen';
@@ -125,7 +126,10 @@ export default function App() {
           sourceId={params?.sourceId}
         />
       ),
-      customerOrders: (params) => <CustomerOrdersScreen pop={pop} customerEmail={params?.email} />,
+      customerOrders: (params) => <CustomerOrdersScreen push={push} pop={pop} customerEmail={params?.email} />,
+      customerOrderDetail: (params) => (
+        <CustomerOrderDetailScreen pop={pop} customerEmail={params?.email} orderId={params?.orderId} />
+      ),
       customerSwappedIn: (params) => <CustomerSwappedInScreen pop={pop} customerEmail={params?.email} />,
       buySubscription: (params) => <BuySubscriptionScreen pop={pop} customerEmail={params?.email} />,
       ops: () => <OpsModeScreen push={push} pop={pop} />,

@@ -109,6 +109,10 @@
  */
 
 /**
+ * @typedef {SwapCustomer} swapCustomer
+ */
+
+/**
  * @typedef {Object} SwapProduct
  * @property {string} id
  * @property {string} name
@@ -161,6 +165,10 @@
  */
 
 /**
+ * @typedef {SwapProduct} swapProducts
+ */
+
+/**
  * @typedef {Object} SwapCustomerOrder
  * @property {string} id
  * @property {string} status
@@ -172,20 +180,32 @@
  */
 
 /**
- * @typedef {Object} SwapOrder
+ * @typedef {Object} swapOrderType
  * @property {string} id
  * @property {string} name
  * @property {string} unique_id_c
+ * @property {string} [customer_id_c]
  * @property {string} type_c
  * @property {string} order_cost_c
- * @property {string} total_items_c
+ * @property {string | number} total_items_c
  * @property {string} order_date_c
+ * @property {string} [points_id_c]
+ * @property {string} [event_id_c]
+ * @property {string} [event_customer_id_c]
+ * @property {string} [subscribe_id_c]
+ * @property {string} [customer_address_id_c]
  * @property {string} status_c
  * @property {string} sub_status_c
- * @property {string} tracking_id_c
- * @property {string} escalate_reason_c
- * @property {SwapCustomer} customer
- * @property {SwapProduct[]} order_line_items
+  * @property {string} tracking_id_c
+ * @property {string} [date_entered]
+  * @property {string} escalate_reason_c
+ * @property {Record<string, unknown>[] | Record<string, unknown> | null} [subscribe]
+ * @property {swapCustomer} customer
+ * @property {swapProducts[]} order_line_items
+ */
+
+/**
+ * @typedef {swapOrderType} SwapOrder
  */
 
 /**
@@ -239,11 +259,11 @@
  */
 
 /**
- * @typedef {{ maxResults?: number, offset?: number, filters?: Array<Record<string, unknown>> }} SwapUnreviewedItemsRequest
+ * @typedef {{ maxResults?: number, offset?: number, filters?: Array<Record<string, unknown>>, customerEmail?: string, authToken?: string }} SwapUnreviewedItemsRequest
  */
 
 /**
- * @typedef {{ id: string, status_c: 'approved' | 'callback' | 'donate' }} SwapReviewItemRequest
+ * @typedef {{ id: string, status_c: 'approved' | 'callback' | 'donate', customerEmail?: string, authToken?: string }} SwapReviewItemRequest
  */
 
 /**

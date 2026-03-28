@@ -1,17 +1,35 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
-import {
-  getActivePackageDetails,
-  getCustomerPickups,
-  getCustomerProfile,
-  getCustomerUnreviewedItems,
-} from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
-import { useSwapStore } from '../../store/swapStore';
+import { buildCustomerUnreviewedItemsCacheKey, useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 
-const getPendingReviewItems = (response) => response?.success?.data?.items || [];
+const getPendingReviewItems = (response) => {
+  if (Array.isArray(response?.success?.data?.items)) {
+    return response.success.data.items;
+  }
+
+  if (Array.isArray(response?.error?.data?.items)) {
+    return response.error.data.items;
+  }
+
+  return [];
+};
+
+const getPendingReviewCount = (response) => {
+  const successCount = Number(response?.success?.data?.total_count);
+  if (!Number.isNaN(successCount) && successCount >= 0) {
+    return successCount;
+  }
+
+  const errorCount = Number(response?.error?.data?.total_count);
+  if (!Number.isNaN(errorCount) && errorCount >= 0) {
+    return errorCount;
+  }
+
+  return getPendingReviewItems(response).length;
+};
 
 const parseDateValue = (value) => {
   if (!value) {
@@ -46,62 +64,83 @@ const getActivePackageDisplayName = (shopSubscribe, fallbackName = '') => {
 export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   const activeCustomer = useSwapStore((state) => state.activeCustomer);
   const fetchShopSubscriptions = useSwapStore((state) => state.fetchShopSubscriptions);
+  const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
+  const activePackageEntry = useSwapStore((state) => state.currentCustomerData.activePackage);
+  const pickupsEntry = useSwapStore((state) => state.currentCustomerData.pickups);
+  const reviewCacheKey = buildCustomerUnreviewedItemsCacheKey({ maxResults: 21, offset: 0, filters: [] });
+  const pendingReviewEntry = useSwapStore((state) => state.currentCustomerData.unreviewedItemsByKey[reviewCacheKey] || null);
+  const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
+  const fetchCustomerActivePackageIfNeeded = useSwapStore((state) => state.fetchCustomerActivePackageIfNeeded);
+  const fetchCustomerPickupsIfNeeded = useSwapStore((state) => state.fetchCustomerPickupsIfNeeded);
+  const fetchCustomerUnreviewedItemsIfNeeded = useSwapStore((state) => state.fetchCustomerUnreviewedItemsIfNeeded);
+  const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
   const activeEmail = customerEmail || activeCustomer?.email || '';
-  const [customer, setCustomer] = useState(null);
-  const [activeSubscription, setActiveSubscription] = useState(null);
-  const [pickups, setPickups] = useState([]);
+  const activeToken = activeCustomer?.token || activeCustomer?.loginResponse?.token || '';
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
-  const [error, setError] = useState('');
   const { withLoader } = useLoader();
+  const customer = profileEntry.data;
+  const activeSubscription = activePackageEntry.data;
+  const pickups = Array.isArray(pickupsEntry.data) ? pickupsEntry.data : [];
+  const error = profileEntry.error || activePackageEntry.error || pickupsEntry.error || pendingReviewEntry?.error || '';
 
   useEffect(() => {
     fetchShopSubscriptions().catch(() => null);
   }, [fetchShopSubscriptions]);
 
   useEffect(() => {
-    let active = true;
-
     const loadCustomer = async () => {
+      const profilePromise = fetchCustomerProfileIfNeeded(activeEmail);
+      const activePackagePromise = fetchCustomerActivePackageIfNeeded(activeEmail);
+      const pickupsPromise = fetchCustomerPickupsIfNeeded(activeEmail);
+      const unreviewedPromise = fetchCustomerUnreviewedItemsIfNeeded({
+        maxResults: 21,
+        offset: 0,
+        customerEmail: activeEmail,
+        authToken: activeToken,
+      });
+      const hasUsableCache =
+        canUseCache(profileEntry) &&
+        canUseCache(activePackageEntry) &&
+        canUseCache(pickupsEntry) &&
+        canUseCache(pendingReviewEntry);
+
       try {
-        setError('');
+        const request = Promise.all([profilePromise, activePackagePromise, pickupsPromise, unreviewedPromise]);
+        const [, , , pendingReviewResponse] = hasUsableCache
+          ? await request
+          : await withLoader(request, 'Loading customer...');
 
-        const profileRequest =
-          activeCustomer?.details && activeCustomer?.email === activeEmail
-            ? Promise.resolve(activeCustomer.details)
-            : getCustomerProfile(activeEmail);
-
-        const [profile, activePackageDetails, customerPickups, pendingReviewResponse] = await withLoader(
-          Promise.all([
-            profileRequest,
-            getActivePackageDetails(activeEmail),
-            getCustomerPickups(activeEmail),
-            getCustomerUnreviewedItems(),
-          ]),
-          'Loading customer...'
-        );
-
-        if (!active) {
-          return;
-        }
-
-        setCustomer(profile);
-        setActiveSubscription(activePackageDetails || null);
-        setPickups(customerPickups || []);
-        setPendingReviewCount(getPendingReviewItems(pendingReviewResponse).length);
-      } catch (loadError) {
-        if (active) {
-          setError(loadError.message || 'Failed to load customer');
-        }
+        setPendingReviewCount(getPendingReviewCount(pendingReviewResponse));
+      } catch {
+        const pendingData = getPendingReviewItems(pendingReviewEntry?.data);
+        setPendingReviewCount(pendingData.length);
       }
     };
 
     loadCustomer();
+  }, [
+    activeEmail,
+    activeToken,
+    activePackageEntry,
+    canUseCache,
+    fetchCustomerActivePackageIfNeeded,
+    fetchCustomerPickupsIfNeeded,
+    fetchCustomerProfileIfNeeded,
+    fetchCustomerUnreviewedItemsIfNeeded,
+    pendingReviewEntry,
+    pickupsEntry,
+    profileEntry,
+    withLoader,
+  ]);
 
-    return () => {
-      active = false;
-    };
-  }, [activeCustomer?.details, activeCustomer?.email, activeEmail, withLoader]);
+  useEffect(() => {
+    if (pendingReviewEntry?.data) {
+      setPendingReviewCount(getPendingReviewCount(pendingReviewEntry.data));
+    } else if (!canUseCache(pendingReviewEntry)) {
+      setPendingReviewCount(0);
+    }
+  }, [canUseCache, pendingReviewEntry]);
 
   const shopSubscribe = customer?.customerSubscribe?.shop_subscribe || null;
   const itemsSwappedInSummary = useMemo(() => {
@@ -185,8 +224,8 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.overviewActionButton} onPress={() => push('buySubscription', { email: customer.email })}>
-          <Text style={styles.overviewActionTitle}>Buy Subscription</Text>
-          <Text style={styles.overviewActionSubtitle}>Buy or top up a plan</Text>
+          <Text style={styles.overviewActionTitle}>Buy Flexi Plan</Text>
+          <Text style={styles.overviewActionSubtitle}>Buy a flexi item plan</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -212,14 +251,14 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
           <Text style={styles.overviewActionSubtitle}>Add items to subscription or pickup</Text>
         </TouchableOpacity>
 
-        {pendingReviewCount > 0 ? (
+        {/* {pendingReviewCount > 0 ? ( */}
           <TouchableOpacity style={styles.overviewActionButton} onPress={() => push('approval', { email: customer.email })}>
             <Text style={styles.overviewActionTitle}>Review Points</Text>
             <Text style={styles.overviewActionSubtitle}>
               {pendingReviewCount} item{pendingReviewCount === 1 ? '' : 's'} pending review
             </Text>
           </TouchableOpacity>
-        ) : null}
+        {/* ) : null} */}
       </View>
 
       <View style={styles.overviewDivider} />

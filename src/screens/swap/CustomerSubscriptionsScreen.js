@@ -1,50 +1,42 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Text, TouchableOpacity } from 'react-native';
-import { formatRemainingItems, getCustomerProfile, getCustomerSubscriptions } from '../../api/swapOpsApi';
+import { formatRemainingItems } from '../../api/swapOpsApi';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
+import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 
 export const CustomerSubscriptionsScreen = ({ pop, push, customerEmail }) => {
-  const [customer, setCustomer] = useState(null);
-  const [subscriptions, setSubscriptions] = useState([]);
-  const [error, setError] = useState('');
   const { withLoader } = useLoader();
+  const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
+  const subscriptionsEntry = useSwapStore((state) => state.currentCustomerData.subscriptions);
+  const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
+  const fetchCustomerSubscriptionsIfNeeded = useSwapStore((state) => state.fetchCustomerSubscriptionsIfNeeded);
+  const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
+  const customer = profileEntry.data;
+  const subscriptions = Array.isArray(subscriptionsEntry.data) ? subscriptionsEntry.data : [];
+  const error = profileEntry.error || subscriptionsEntry.error || '';
 
   useEffect(() => {
-    let active = true;
-
     const loadData = async () => {
+      const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
+      const subscriptionsPromise = fetchCustomerSubscriptionsIfNeeded(customerEmail);
+      const hasUsableCache = canUseCache(profileEntry) && canUseCache(subscriptionsEntry);
+
       try {
-        setError('');
-        const [profile, subscriptionList] = await withLoader(
-          Promise.all([
-            getCustomerProfile(customerEmail),
-            getCustomerSubscriptions(customerEmail),
-          ]),
-          'Loading subscriptions...'
-        );
-
-        if (!active) {
-          return;
+        if (hasUsableCache) {
+          await Promise.all([profilePromise, subscriptionsPromise]);
+        } else {
+          await withLoader(Promise.all([profilePromise, subscriptionsPromise]), 'Loading subscriptions...');
         }
-
-        setCustomer(profile);
-        setSubscriptions(subscriptionList);
-      } catch (loadError) {
-        if (active) {
-          setError(loadError.message || 'Failed to load subscriptions');
-        }
+      } catch {
+        // Store entries capture fetch errors for rendering.
       }
     };
 
     loadData();
-
-    return () => {
-      active = false;
-    };
-  }, [customerEmail, withLoader]);
+  }, [canUseCache, customerEmail, fetchCustomerProfileIfNeeded, fetchCustomerSubscriptionsIfNeeded, profileEntry, subscriptionsEntry, withLoader]);
 
   if (!customer) {
     return (

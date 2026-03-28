@@ -1,47 +1,54 @@
-import React, { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
-import { getCustomerOrders, getCustomerProfile } from '../../api/swapOpsApi';
+import React, { useEffect } from 'react';
+import { Text, TouchableOpacity } from 'react-native';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
+import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 
-export const CustomerOrdersScreen = ({ pop, customerEmail }) => {
-  const [customer, setCustomer] = useState(null);
-  const [orders, setOrders] = useState([]);
-  const [error, setError] = useState('');
+const formatOrderDate = (value) => {
+  if (!value) {
+    return 'NA';
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(parsedDate);
+};
+
+export const CustomerOrdersScreen = ({ pop, push, customerEmail }) => {
   const { withLoader } = useLoader();
+  const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
+  const ordersEntry = useSwapStore((state) => state.currentCustomerData.orders);
+  const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
+  const fetchCustomerOrdersIfNeeded = useSwapStore((state) => state.fetchCustomerOrdersIfNeeded);
+  const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
+  const customer = profileEntry.data;
+  const orders = Array.isArray(ordersEntry.data) ? ordersEntry.data : [];
+  const error = profileEntry.error || ordersEntry.error || '';
 
   useEffect(() => {
-    let active = true;
-
     const loadData = async () => {
+      const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
+      const ordersPromise = fetchCustomerOrdersIfNeeded(customerEmail);
+      const hasUsableCache = canUseCache(profileEntry) && canUseCache(ordersEntry);
+
       try {
-        setError('');
-        const [profile, orderList] = await withLoader(
-          Promise.all([getCustomerProfile(customerEmail), getCustomerOrders(customerEmail)]),
-          'Loading orders...'
-        );
-
-        if (!active) {
-          return;
+        if (hasUsableCache) {
+          await Promise.all([profilePromise, ordersPromise]);
+        } else {
+          await withLoader(Promise.all([profilePromise, ordersPromise]), 'Loading orders...');
         }
-
-        setCustomer(profile);
-        setOrders(orderList);
-      } catch (loadError) {
-        if (active) {
-          setError(loadError.message || 'Failed to load orders');
-        }
+      } catch {
+        // Store entries capture fetch errors for rendering.
       }
     };
 
     loadData();
-
-    return () => {
-      active = false;
-    };
-  }, [customerEmail, withLoader]);
+  }, [canUseCache, customerEmail, fetchCustomerOrdersIfNeeded, fetchCustomerProfileIfNeeded, ordersEntry, profileEntry, withLoader]);
 
   if (!customer) {
     return (
@@ -54,13 +61,16 @@ export const CustomerOrdersScreen = ({ pop, customerEmail }) => {
   return (
     <ScreenShell title="Orders" subtitle={`${customer.name} order history`} onBack={pop} backgroundColor="#ffe4e1">
       {orders.map((order) => (
-        <View key={order.id} style={styles.listItem}>
-          <Row label="Order Id" value={order.id} />
-          <Row label="Status" value={order.status} />
-          <Row label="Date" value={order.date} />
-          <Row label="Items" value={order.itemCount} />
-          <Row label="Total" value={order.total} />
-        </View>
+        <TouchableOpacity
+          key={order.id}
+          onPress={() => push('customerOrderDetail', { email: customerEmail, orderId: order.id })}
+          style={styles.pressableListItem}
+        >
+          <Row label="Order Id" value={order.unique_id_c || order.id} />
+          <Row label="Date" value={formatOrderDate(order.order_date_c)} />
+          <Row label="Total Price" value={`${Number.parseInt(String(order.order_cost_c || '0'), 10) || 0} pts`} />
+          <Row label="Number of Items" value={String(order.total_items_c || order.order_line_items?.length || 0)} />
+        </TouchableOpacity>
       ))}
     </ScreenShell>
   );

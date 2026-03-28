@@ -1,18 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import {
-  getCustomerPickupDetails,
-  getCustomerProfile,
-  getCustomerSubscriptionDetails,
   getItemEntryOptions,
 } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
+import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 
 export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, sourceId }) => {
-  const [customer, setCustomer] = useState(null);
-  const [source, setSource] = useState(null);
   const [itemOptions, setItemOptions] = useState({
     categoryOptions: {},
     colorOptions: [],
@@ -31,52 +27,60 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const { withLoader } = useLoader();
+  const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
+  const subscriptionEntry = useSwapStore((state) => state.currentCustomerData.subscriptionDetailsById[String(sourceId)] || null);
+  const pickupEntry = useSwapStore((state) => state.currentCustomerData.pickupDetailsById[String(sourceId)] || null);
+  const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
+  const fetchCustomerSubscriptionDetailIfNeeded = useSwapStore((state) => state.fetchCustomerSubscriptionDetailIfNeeded);
+  const fetchCustomerPickupDetailIfNeeded = useSwapStore((state) => state.fetchCustomerPickupDetailIfNeeded);
+  const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
+  const customer = profileEntry.data;
+  const sourceEntry = sourceType === 'subscription' ? subscriptionEntry : pickupEntry;
+  const source = sourceEntry?.data || null;
 
   useEffect(() => {
-    let active = true;
-
     const loadData = async () => {
+      const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
+      const sourcePromise =
+        sourceType === 'subscription'
+          ? fetchCustomerSubscriptionDetailIfNeeded(customerEmail, sourceId)
+          : fetchCustomerPickupDetailIfNeeded(customerEmail, sourceId);
+      const optionsPromise = getItemEntryOptions();
+      const hasUsableCache = canUseCache(profileEntry) && canUseCache(sourceEntry);
+
       try {
         setError('');
-        const [profile, options, currentSource] = await withLoader(
-          Promise.all([
-            getCustomerProfile(customerEmail),
-            getItemEntryOptions(),
-            sourceType === 'subscription'
-              ? getCustomerSubscriptionDetails(customerEmail, sourceId)
-              : getCustomerPickupDetails(customerEmail, sourceId),
-          ]),
-          'Loading item entry...'
-        );
-
-        if (!active) {
-          return;
-        }
+        const [, options] = hasUsableCache
+          ? await Promise.all([profilePromise, optionsPromise, sourcePromise])
+          : await withLoader(Promise.all([profilePromise, optionsPromise, sourcePromise]), 'Loading item entry...');
 
         const categories = Object.keys(options.categoryOptions);
         const defaultCategory = categories[0] || '';
         const defaultSubcategory = options.categoryOptions[defaultCategory]?.[0] || '';
 
-        setCustomer(profile);
         setItemOptions(options);
-        setSource(currentSource);
         setCategory(defaultCategory);
         setSubcategory(defaultSubcategory);
         setColor(options.colorOptions[0] || '');
         setCondition(options.conditionOptions[0] || '');
       } catch (loadError) {
-        if (active) {
-          setError(loadError.message || 'Failed to load item entry data');
-        }
+        setError(loadError.message || 'Failed to load item entry data');
       }
     };
 
     loadData();
-
-    return () => {
-      active = false;
-    };
-  }, [customerEmail, sourceId, sourceType, withLoader]);
+  }, [
+    canUseCache,
+    customerEmail,
+    fetchCustomerPickupDetailIfNeeded,
+    fetchCustomerProfileIfNeeded,
+    fetchCustomerSubscriptionDetailIfNeeded,
+    profileEntry,
+    sourceEntry,
+    sourceId,
+    sourceType,
+    withLoader,
+  ]);
 
   const categories = useMemo(() => Object.keys(itemOptions.categoryOptions), [itemOptions.categoryOptions]);
   const subcategoryOptions = useMemo(() => itemOptions.categoryOptions[category] || [], [category, itemOptions.categoryOptions]);

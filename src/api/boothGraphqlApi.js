@@ -253,7 +253,36 @@ const formatBoothProduct = (product) => ({
   price: `$${Number(product.listing_price || 0).toFixed(2)}`,
 });
 
-const requestBoothGraphql = async (query, variables = {}, { requiresAuth = true } = {}) => {
+const logBoothRequest = ({ callerName = 'unknown', payload, headers }) => {
+  console.log('[boothApi] request', {
+    functionName: callerName,
+    method: 'POST',
+    url: BOOTH_GRAPHQL_URL,
+    payload,
+    hasAuth: Boolean(headers?.Authorization),
+  });
+};
+
+const logBoothResponse = ({ callerName = 'unknown', response, error }) => {
+  if (error) {
+    console.error('[boothApi] response', {
+      functionName: callerName,
+      method: 'POST',
+      url: BOOTH_GRAPHQL_URL,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+
+  console.log('[boothApi] response', {
+    functionName: callerName,
+    method: 'POST',
+    url: BOOTH_GRAPHQL_URL,
+    hasData: Boolean(response),
+  });
+};
+
+const requestBoothGraphql = async (query, variables = {}, { requiresAuth = true, callerName = 'unknown' } = {}) => {
   if (!BOOTH_GRAPHQL_URL) {
     throw new Error('EXPO_PUBLIC_BOOTH_GRAPHQL_URL is required in .env when EXPO_PUBLIC_BOOTH_USE_MOCK is false.');
   }
@@ -271,6 +300,12 @@ const requestBoothGraphql = async (query, variables = {}, { requiresAuth = true 
     headers.Authorization = `Bearer ${token}`;
   }
 
+  logBoothRequest({
+    callerName,
+    payload: { query, variables },
+    headers,
+  });
+
   const response = await fetch(BOOTH_GRAPHQL_URL, {
     method: 'POST',
     headers,
@@ -279,14 +314,19 @@ const requestBoothGraphql = async (query, variables = {}, { requiresAuth = true 
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Booth GraphQL request failed (${response.status}): ${text}`);
+    const error = new Error(`Booth GraphQL request failed (${response.status}): ${text}`);
+    logBoothResponse({ callerName, error });
+    throw error;
   }
 
   const payload = await response.json();
   if (payload.errors?.length) {
-    throw new Error(payload.errors[0]?.message || 'Booth GraphQL request failed.');
+    const error = new Error(payload.errors[0]?.message || 'Booth GraphQL request failed.');
+    logBoothResponse({ callerName, error });
+    throw error;
   }
 
+  logBoothResponse({ callerName, response: payload.data });
   return payload.data;
 };
 
@@ -298,7 +338,7 @@ export const boothGraphqlConfig = {
 export const isBoothLiveEnabled = () => !BOOTH_USE_MOCK;
 
 export const fetchSellerBooths = async ({ where = {}, start = 0, limit = 50 } = {}) => {
-  const data = await requestBoothGraphql(GET_SELLER_BOOTHS_QUERY, { where, start, limit });
+  const data = await requestBoothGraphql(GET_SELLER_BOOTHS_QUERY, { where, start, limit }, { callerName: 'fetchSellerBooths' });
   return {
     booths: data?.sellerBooths || [],
     totalCount: data?.sellerBoothsConnection?.aggregate?.count || 0,
@@ -306,7 +346,7 @@ export const fetchSellerBooths = async ({ where = {}, start = 0, limit = 50 } = 
 };
 
 export const fetchBoothProducts = async (where) => {
-  const data = await requestBoothGraphql(GET_BOOTH_PRODUCTS_QUERY, { where });
+  const data = await requestBoothGraphql(GET_BOOTH_PRODUCTS_QUERY, { where }, { callerName: 'fetchBoothProducts' });
   return {
     products: (data?.boothProducts || []).map(formatBoothProduct),
     totalCount: data?.boothProductsConnection?.aggregate?.count || 0,
@@ -321,7 +361,7 @@ export const fetchBoothProductStatusCounts = async (boothId) => {
     approvedWhere: { ...base, manual_review_passed: true, rejected: false, returned_to_seller: false, sold: false },
     soldWhere: { ...base, sold: true },
     rejectedWhere: { ...base, rejected: true },
-  });
+  }, { callerName: 'fetchBoothProductStatusCounts' });
 
   return {
     total: data?.total?.aggregate?.count || 0,
@@ -333,7 +373,7 @@ export const fetchBoothProductStatusCounts = async (boothId) => {
 };
 
 export const fetchBoothProductById = async (id) => {
-  const data = await requestBoothGraphql(GET_BOOTH_PRODUCT_BY_ID_QUERY, { id });
+  const data = await requestBoothGraphql(GET_BOOTH_PRODUCT_BY_ID_QUERY, { id }, { callerName: 'fetchBoothProductById' });
   const product = data?.boothProducts?.[0] || null;
   return product ? formatBoothProduct(product) : null;
 };
@@ -344,7 +384,7 @@ export const mutateBoothProduct = async (id, updates) => {
       where: { id },
       data: updates,
     },
-  });
+  }, { callerName: 'mutateBoothProduct' });
 
   const product = data?.updateBoothProduct?.boothProduct || null;
   return product ? formatBoothProduct(product) : null;
@@ -356,13 +396,13 @@ export const mutateBooth = async (id, updates) => {
       where: { id },
       data: updates,
     },
-  });
+  }, { callerName: 'mutateBooth' });
 
   return data?.updateSellerBooth?.sellerBooth || null;
 };
 
 export const fetchBoothPaymentMethods = async () => {
-  const data = await requestBoothGraphql(GET_BOOTH_PAYMENT_METHODS_QUERY);
+  const data = await requestBoothGraphql(GET_BOOTH_PAYMENT_METHODS_QUERY, {}, { callerName: 'fetchBoothPaymentMethods' });
   return data?.boothPaymentMethods || [];
 };
 
@@ -371,7 +411,7 @@ export const createLiveBoothCheckout = async (checkoutData) => {
     input: {
       data: checkoutData,
     },
-  });
+  }, { callerName: 'createLiveBoothCheckout' });
 
   return data?.createBoothCheckout?.boothCheckout || null;
 };
@@ -382,13 +422,13 @@ export const markLiveProductSale = async (id, quantity) => {
       where: { id },
       data: { quantity },
     },
-  });
+  }, { callerName: 'markLiveProductSale' });
 
   return data?.markProductSale || null;
 };
 
 export const fetchAllBoothCheckouts = async ({ start = 0, limit = 50, sort = 'checkout_date:desc', where } = {}) => {
-  const data = await requestBoothGraphql(GET_ALL_BOOTH_CHECKOUTS_QUERY, { start, limit, sort, where });
+  const data = await requestBoothGraphql(GET_ALL_BOOTH_CHECKOUTS_QUERY, { start, limit, sort, where }, { callerName: 'fetchAllBoothCheckouts' });
   return {
     checkouts: data?.boothCheckouts || [],
     totalCount: data?.boothCheckoutsConnection?.aggregate?.count || 0,
@@ -401,7 +441,7 @@ export const fetchAllBoothCheckouts = async ({ start = 0, limit = 50, sort = 'ch
 };
 
 export const fetchBoothCheckout = async (id) => {
-  const data = await requestBoothGraphql(GET_BOOTH_CHECKOUT_QUERY, { id });
+  const data = await requestBoothGraphql(GET_BOOTH_CHECKOUT_QUERY, { id }, { callerName: 'fetchBoothCheckout' });
   const checkout = data?.boothCheckout || null;
   if (!checkout) {
     return { checkout: null };

@@ -1,51 +1,43 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
-import { formatRemainingItems, getCustomerProfile, getCustomerSubscriptionDetails } from '../../api/swapOpsApi';
+import { formatRemainingItems } from '../../api/swapOpsApi';
 import { ProductCard } from '../../components/ProductCard';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
+import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 
 export const CustomerSubscriptionDetailScreen = ({ pop, push, customerEmail, subscriptionId }) => {
-  const [customer, setCustomer] = useState(null);
-  const [subscription, setSubscription] = useState(null);
-  const [error, setError] = useState('');
   const { withLoader } = useLoader();
+  const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
+  const subscriptionEntry = useSwapStore((state) => state.currentCustomerData.subscriptionDetailsById[String(subscriptionId)] || null);
+  const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
+  const fetchCustomerSubscriptionDetailIfNeeded = useSwapStore((state) => state.fetchCustomerSubscriptionDetailIfNeeded);
+  const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
+  const customer = profileEntry.data;
+  const subscription = subscriptionEntry?.data || null;
+  const error = profileEntry.error || subscriptionEntry?.error || '';
 
   useEffect(() => {
-    let active = true;
-
     const loadData = async () => {
+      const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
+      const subscriptionPromise = fetchCustomerSubscriptionDetailIfNeeded(customerEmail, subscriptionId);
+      const hasUsableCache = canUseCache(profileEntry) && canUseCache(subscriptionEntry);
+
       try {
-        setError('');
-        const [profile, subscriptionDetails] = await withLoader(
-          Promise.all([
-            getCustomerProfile(customerEmail),
-            getCustomerSubscriptionDetails(customerEmail, subscriptionId),
-          ]),
-          'Loading subscription details...'
-        );
-
-        if (!active) {
-          return;
+        if (hasUsableCache) {
+          await Promise.all([profilePromise, subscriptionPromise]);
+        } else {
+          await withLoader(Promise.all([profilePromise, subscriptionPromise]), 'Loading subscription details...');
         }
-
-        setCustomer(profile);
-        setSubscription(subscriptionDetails);
-      } catch (loadError) {
-        if (active) {
-          setError(loadError.message || 'Failed to load subscription details');
-        }
+      } catch {
+        // Store entries capture fetch errors for rendering.
       }
     };
 
     loadData();
-
-    return () => {
-      active = false;
-    };
-  }, [customerEmail, subscriptionId, withLoader]);
+  }, [canUseCache, customerEmail, fetchCustomerProfileIfNeeded, fetchCustomerSubscriptionDetailIfNeeded, profileEntry, subscriptionEntry, subscriptionId, withLoader]);
 
   if (!customer || !subscription) {
     return (

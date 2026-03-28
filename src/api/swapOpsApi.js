@@ -62,6 +62,8 @@ const APP_LOGIN_PATH = 'guests/customers/get-started';
 const APP_GUEST_REGISTER_PATH = 'guests/register';
 const APP_LOGIN_TENANCY = 'SWAP.AUTH.TYPE.EMAIL';
 const SWAP_ORDER_CREATE_PATH = 'orders/save/shop';
+const SWAP_ORDER_LIST_PATH = 'orders/list';
+const SWAP_ORDER_DETAIL_PATH = 'orders/detail';
 const EMPTY_ARRAY = [];
 const customerSessionCache = new Map();
 let boothProductsStore = mockBoothProducts.map((product) => ({ ...product }));
@@ -69,11 +71,27 @@ let boothCheckoutsStore = mockBoothCheckouts.map((checkout) => ({
   ...checkout,
   items: (checkout.items || []).map((item) => ({ ...item })),
 }));
-let customerOrdersStore = customerOrders.map((order) => ({ ...order }));
+let customerOrdersStore = customerOrders.map((order) => ({
+  ...order,
+  customer: order.customer ? { ...order.customer } : null,
+  order_line_items: (order.order_line_items || []).map((item) => ({ ...item })),
+}));
 
 const getResponseData = (response) => response?.success?.data || {};
 
 const getResponseError = (response) => response?.error || null;
+
+const getCustomerItemsListData = (response) => {
+  if (response?.success?.data && typeof response.success.data === 'object') {
+    return response.success.data;
+  }
+
+  if (response?.error?.data && typeof response.error.data === 'object') {
+    return response.error.data;
+  }
+
+  return {};
+};
 
 const toCurrencyLabel = (value) => `$${Number(value || 0).toFixed(2)}`;
 
@@ -451,6 +469,36 @@ const withSwapAuthHeader = async (headers = {}, authToken = '') => {
   return token ? { ...headers, Authorization: `Bearer ${token}` } : headers;
 };
 
+const logApiRequest = ({ callerName = 'unknown', method, url, payload, headers }) => {
+  console.log('[swapApi] request', {
+    functionName: callerName,
+    method,
+    url,
+    payload,
+    hasAuth: Boolean(headers?.Authorization),
+  });
+};
+
+const logApiResponse = ({ callerName = 'unknown', method, url, response, error }) => {
+  if (error) {
+    console.error('[swapApi] response', {
+      functionName: callerName,
+      method,
+      url,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+
+  console.log('[swapApi] response', {
+    functionName: callerName,
+    method,
+    url,
+    status: response?.status,
+    status_code: response?.status_code,
+  });
+};
+
 /**
  * Sends a POST request with JSON payload.
  * @param {string} path
@@ -458,13 +506,21 @@ const withSwapAuthHeader = async (headers = {}, authToken = '') => {
  * @param {boolean} [withVersion=true]
  * @returns {Promise<Record<string, unknown>>}
  */
-const postJson = async (path, body, withVersion = true, extraHeaders = {}, authToken = '') => {
+const postJson = async (path, body, withVersion = true, extraHeaders = {}, authToken = '', callerName = 'unknown') => {
   const headers = await withSwapAuthHeader({
     'Content-Type': 'application/json',
     ...extraHeaders,
   }, authToken);
+  const url = buildUrl(path, withVersion);
+  logApiRequest({
+    callerName,
+    method: 'POST',
+    url,
+    payload: body,
+    headers,
+  });
 
-  const response = await fetch(buildUrl(path, withVersion), {
+  const response = await fetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -472,14 +528,25 @@ const postJson = async (path, body, withVersion = true, extraHeaders = {}, authT
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Swap API request failed (${response.status}): ${errorText}`);
+    const error = new Error(`Swap API request failed (${response.status}): ${errorText}`);
+    logApiResponse({ callerName, method: 'POST', url, error });
+    throw error;
   }
 
-  return response.json();
+  const data = await response.json();
+  logApiResponse({ callerName, method: 'POST', url, response: data });
+  return data;
 };
 
-const getJson = async (url, headers = {}, authToken = '') => {
+const getJson = async (url, headers = {}, authToken = '', callerName = 'unknown') => {
   const requestHeaders = await withSwapAuthHeader(headers, authToken);
+  logApiRequest({
+    callerName,
+    method: 'GET',
+    url,
+    payload: null,
+    headers: requestHeaders,
+  });
   const response = await fetch(url, {
     method: 'GET',
     headers: requestHeaders,
@@ -487,10 +554,14 @@ const getJson = async (url, headers = {}, authToken = '') => {
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Swap API request failed (${response.status}): ${errorText}`);
+    const error = new Error(`Swap API request failed (${response.status}): ${errorText}`);
+    logApiResponse({ callerName, method: 'GET', url, error });
+    throw error;
   }
 
-  return response.json();
+  const data = await response.json();
+  logApiResponse({ callerName, method: 'GET', url, response: data });
+  return data;
 };
 
 /**
@@ -549,9 +620,17 @@ const assertSwapSuccess = (response) => {
  * @param {boolean} [withVersion=true]
  * @returns {Promise<Record<string, unknown>>}
  */
-const postFormData = async (path, formData, withVersion = true, authToken = '') => {
+const postFormData = async (path, formData, withVersion = true, authToken = '', callerName = 'unknown') => {
   const headers = await withSwapAuthHeader({}, authToken);
-  const response = await fetch(buildUrl(path, withVersion), {
+  const url = buildUrl(path, withVersion);
+  logApiRequest({
+    callerName,
+    method: 'POST',
+    url,
+    payload: '[form-data]',
+    headers,
+  });
+  const response = await fetch(url, {
     method: 'POST',
     headers,
     body: formData,
@@ -559,10 +638,14 @@ const postFormData = async (path, formData, withVersion = true, authToken = '') 
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Swap API request failed (${response.status}): ${errorText}`);
+    const error = new Error(`Swap API request failed (${response.status}): ${errorText}`);
+    logApiResponse({ callerName, method: 'POST', url, error });
+    throw error;
   }
 
-  return response.json();
+  const data = await response.json();
+  logApiResponse({ callerName, method: 'POST', url, response: data });
+  return data;
 };
 
 /**
@@ -631,7 +714,7 @@ export const loginAsCustomer = async (email) => {
   });
 
   try {
-    const response = await postJson(path, payload);
+    const response = await postJson(path, payload, true, {}, '', 'loginAsCustomer');
     const data = response?.success?.data || {};
     const normalizedResponse = {
       token: data?.token || response?.token || '',
@@ -696,7 +779,9 @@ export const loginAppUser = async (email, password, authToken = '') => {
       tenancy: APP_LOGIN_TENANCY,
     },
     true,
-    authToken ? { Authorization: `Bearer ${authToken}` } : {}
+    authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    '',
+    'loginAppUser'
   );
 
   const session = extractAuthSession(response);
@@ -737,7 +822,7 @@ export const registerGuestSession = async () => {
     };
   }
 
-  const response = await postJson(APP_GUEST_REGISTER_PATH, {});
+  const response = await postJson(APP_GUEST_REGISTER_PATH, {}, true, {}, '', 'registerGuestSession');
   const session = extractGuestSession(response);
 
   if (!session.token) {
@@ -777,7 +862,9 @@ export const checkCustomerSession = async (token) => {
     true,
     {
       Authorization: `Bearer ${token}`,
-    }
+    },
+    '',
+    'checkCustomerSession'
   );
 
   if (!response?.status) {
@@ -810,7 +897,7 @@ export const getWalletBalances = async (token, email = '') => {
     };
   }
 
-  return getJson(buildWalletUrl('v1/wallet/get/balances'), token ? { Authorization: `Bearer ${token}` } : {});
+  return getJson(buildWalletUrl('v1/wallet/get/balances'), token ? { Authorization: `Bearer ${token}` } : {}, '', 'getWalletBalances');
 };
 
 const createCustomerSession = async (email) => {
@@ -916,6 +1003,20 @@ const resolveBuyPointsSession = async () => {
   };
 };
 
+const resolveCustomerAuthToken = async (customerEmail = '', authToken = '') => {
+  if (authToken) {
+    return authToken;
+  }
+
+  const normalizedEmail = String(customerEmail || '').trim().toLowerCase();
+  if (!normalizedEmail) {
+    return '';
+  }
+
+  const loginResponse = await loginAsCustomer(normalizedEmail);
+  return loginResponse?.token || '';
+};
+
 const resolveSwapSrUserId = async () => {
   const cachedSession = getCachedStoredAppSession();
   const srUserId = cachedSession?.shopCustomerId || (await getStoredShopCustomerId());
@@ -964,7 +1065,7 @@ const buyPointsForCheckout = async ({ requiredPoints, paymentMethod, authToken }
 /**
  * Get customer orders.
  * @param {string} email
- * @returns {Promise<import('../types/swapTypes').SwapCustomerOrder[]>}
+ * @returns {Promise<import('../types/swapTypes').SwapOrder[]>}
  */
 export const getCustomerOrders = async (email) => {
   if (SWAP_USE_MOCK) {
@@ -976,7 +1077,80 @@ export const getCustomerOrders = async (email) => {
     return customerOrdersStore;
   }
 
-  return EMPTY_ARRAY;
+  const session = await createCustomerSession(email);
+  const customerId = session?.loginResponse?.customer?.id;
+  const authToken = session?.loginResponse?.token || '';
+
+  if (!customerId) {
+    return EMPTY_ARRAY;
+  }
+
+  const response = await postJson(
+    SWAP_ORDER_LIST_PATH,
+    {
+      status_c: ['pending', 'received', 'packed', 'ready_to_shipped', 'shipped', 'delivered', 'cancelled'],
+      type_c: 'shop',
+      customer_id_c: customerId,
+      data_tenancy: 'SWAP.ORDER.DATA_VIEW.DETAIL_PROTECTED',
+      sort_tenancy: 'SWAP.ORDER.SORT.DATE_ENTERED',
+      sort_type: 'SWAP.ORDER.SORT_TYPE.DESC',
+      max_results: 20,
+      offset: 0,
+      data_mode: '',
+    },
+    true,
+    {},
+    authToken,
+    'getCustomerOrders'
+  );
+
+  const orders = getResponseData(response).orders;
+  return Array.isArray(orders) ? orders : EMPTY_ARRAY;
+};
+
+/**
+ * Get customer order details.
+ * @param {string} email
+ * @param {string} orderId
+ * @returns {Promise<import('../types/swapTypes').SwapOrder | null>}
+ */
+export const getCustomerOrderDetails = async (email, orderId) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const mockOrder = customerOrdersStore.find((order) => String(order?.id) === String(orderId) || String(order?.unique_id_c) === String(orderId));
+    return mockOrder || null;
+  }
+
+  const session = await createCustomerSession(email);
+  const authToken = session?.loginResponse?.token || '';
+
+  if (!authToken) {
+    return null;
+  }
+
+  const response = await postJson(
+    SWAP_ORDER_DETAIL_PATH,
+    {
+      id: orderId,
+      data_tenancy: 'SWAP.ORDER.DATA_VIEW.DETAIL_PROTECTED',
+      detail_tenancy: 'SWAP.ORDER.DETAIL_VIEW.ID',
+    },
+    true,
+    {},
+    authToken,
+    'getCustomerOrderDetails'
+  );
+
+  const order = getResponseData(response).order;
+  if (!order || typeof order !== 'object') {
+    return null;
+  }
+
+  return {
+    ...order,
+    customer: Array.isArray(order.customer) ? order.customer[0] || null : order.customer,
+    order_line_items: Array.isArray(order.order_line_items) ? order.order_line_items : EMPTY_ARRAY,
+  };
 };
 
 /**
@@ -1050,7 +1224,14 @@ export const createSwapOrder = async (orderData, authToken = '') => {
     });
   }
 
-  return postJson(SWAP_ORDER_CREATE_PATH, orderData, true, authToken ? { Authorization: `Bearer ${authToken}` } : {}, authToken);
+  return postJson(
+    SWAP_ORDER_CREATE_PATH,
+    orderData,
+    true,
+    authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    authToken,
+    'createSwapOrder'
+  );
 };
 
 /**
@@ -1250,7 +1431,7 @@ export const getAllCustomerPickups = async (email) => {
     customer_id_c: customerId,
     max_results: 100,
     offset: 0,
-  });
+  }, true, {}, '', 'getAllCustomerPickups');
 
   return (getResponseData(response).pickups || []).map(mapApiPickupToPickup);
 };
@@ -1279,7 +1460,7 @@ export const getCustomerSubscriptionDetails = async (email, subscriptionId) => {
     customer_id_c: customerId,
     subscribe_id_c: subscriptionId,
     fetch_items: true,
-  });
+  }, true, {}, '', 'getCustomerSubscriptionDetails');
 
   const subscription = getResponseData(response).subscribe || getResponseData(response).subscription || null;
 
@@ -1376,7 +1557,7 @@ export const getSubscriptionsList = async (tenancy = 'SWAP.SUB.TYPE.ITEMS.STORE'
     return toMockSubscriptionListResponse(tenancy);
   }
 
-  return postJson('subscriptions/list', { tenancy }, true, {}, authToken);
+  return postJson('subscriptions/list', { tenancy }, true, {}, authToken, 'getSubscriptionsList');
 };
 
 export const getAllSubscriptions = async () => {
@@ -1482,7 +1663,8 @@ export const saveShopSubscription = async ({
       payload,
       true,
       authToken ? { Authorization: `Bearer ${authToken}` } : {},
-      authToken
+      authToken,
+      'saveShopSubscription'
     );
     console.log('[swapApi] saveShopSubscription response', response);
     return response;
@@ -1529,7 +1711,7 @@ export const getCustomerSubscribesList = async ({
     customer_id_c: customerId,
     subscribe_type_c: subscribeType,
     ignore_non_pickup_subscribe: ignoreNonPickupSubscribe,
-  });
+  }, true, {}, '', 'getCustomerSubscribesList');
 };
 
 /**
@@ -1552,7 +1734,7 @@ export const getCustomerDetails = async () => {
     reset_cache: true,
     fetch_wallets: true,
     fetch_subscribe_list: true,
-  });
+  }, true, {}, '', 'getCustomerDetails');
 };
 
 /**
@@ -1591,6 +1773,9 @@ export const getItemsByPickup = async ({ pickupId, maxResults = 20, offset = 0, 
       filters,
     },
     false,
+    {},
+    '',
+    'getItemsByPickup'
   );
 };
 
@@ -1600,7 +1785,7 @@ export const getItemsByPickup = async ({ pickupId, maxResults = 20, offset = 0, 
  * @param {import('../types/swapTypes').SwapUnreviewedItemsRequest} params
  * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<Record<string, unknown>> | Record<string, unknown>>}
  */
-export const getCustomerUnreviewedItems = async ({ maxResults = 21, offset = 0, filters = [] } = {}) => {
+export const getCustomerUnreviewedItems = async ({ maxResults = 21, offset = 0, filters = [], customerEmail = '', authToken = '' } = {}) => {
   if (SWAP_USE_MOCK) {
     await delay();
     return {
@@ -1618,15 +1803,46 @@ export const getCustomerUnreviewedItems = async ({ maxResults = 21, offset = 0, 
     };
   }
 
-  return postJson('customer-items/list', {
-    parent_filter_tenancy: 'SWAP.ITEM.PARENT_FILTER.CUSTOMER.UNCONFIRMED',
-    view_tenancy: 'SWAP.ITEM.IMAGE_VIEW.UNCONFIRMED_LIST',
-    parent_filter: '',
-    max_results: maxResults,
-    offset,
-    filters,
-    sort: 'SWAP.ITEM.SORT.DATE.RECENT',
-  });
+  const customerAuthToken = await resolveCustomerAuthToken(customerEmail, authToken);
+  const response = await postJson(
+    'customer-items/list',
+    {
+      parent_filter_tenancy: 'SWAP.ITEM.PARENT_FILTER.CUSTOMER.UNCONFIRMED',
+      view_tenancy: 'SWAP.ITEM.IMAGE_VIEW.UNCONFIRMED_LIST',
+      parent_filter: 'test',
+      max_results: maxResults,
+      offset,
+      filters,
+      sort: 'SWAP.ITEM.SORT.DATE.RECENT',
+    },
+    true,
+    {},
+    customerAuthToken,
+    'getCustomerUnreviewedItems'
+  );
+
+  const data = getCustomerItemsListData(response);
+  return {
+    ...response,
+    success: response?.success
+      ? {
+          ...response.success,
+          data: {
+            ...data,
+            items: Array.isArray(data?.items) ? data.items : EMPTY_ARRAY,
+          },
+        }
+      : response.success,
+    error: response?.error
+      ? {
+          ...response.error,
+          data: {
+            ...data,
+            items: Array.isArray(data?.items) ? data.items : EMPTY_ARRAY,
+          },
+        }
+      : response.error,
+  };
 };
 
 /**
@@ -1635,7 +1851,7 @@ export const getCustomerUnreviewedItems = async ({ maxResults = 21, offset = 0, 
  * @param {import('../types/swapTypes').SwapReviewItemRequest} params
  * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<import('../types/swapTypes').SwapProduct> | Record<string, unknown>>}
  */
-export const reviewCustomerItem = async ({ id, status_c }) => {
+export const reviewCustomerItem = async ({ id, status_c, customerEmail = '', authToken = '' }) => {
   if (SWAP_USE_MOCK) {
     await delay();
 
@@ -1651,13 +1867,17 @@ export const reviewCustomerItem = async ({ id, status_c }) => {
     return createSwapSuccessResponse('CIT-200', 'Customer item reviewed', product);
   }
 
+  const customerAuthToken = await resolveCustomerAuthToken(customerEmail, authToken);
   return postJson(
     'v4/customer-items/review/item',
     {
       id,
       status_c,
     },
-    false
+    false,
+    {},
+    customerAuthToken,
+    'reviewCustomerItem'
   );
 };
 
@@ -1689,7 +1909,7 @@ export const addItemToCustomerPickup = async ({ pickupId, thumbnailFile }) => {
   formData.append('pickup_id_c', pickupId);
   formData.append('thumbnail_c', thumbnailFile);
 
-  return postFormData('users/customer-items/init', formData, false);
+  return postFormData('users/customer-items/init', formData, false, '', 'addItemToCustomerPickup');
 };
 
 export const getCustomerProfile = async (email) => {
@@ -1774,14 +1994,14 @@ export const getItemEntryOptions = async () => {
   };
 };
 
-export const getInspectionProducts = async () => {
+export const getInspectionProducts = async ({ customerEmail = '', authToken = '' } = {}) => {
   if (SWAP_USE_MOCK) {
     await delay();
     return mockSwapProducts;
   }
 
-  const response = await getCustomerUnreviewedItems();
-  return getResponseData(response).items || EMPTY_ARRAY;
+  const response = await getCustomerUnreviewedItems({ customerEmail, authToken });
+  return getCustomerItemsListData(response).items || EMPTY_ARRAY;
 };
 
 export const getBoothProducts = async () => {
