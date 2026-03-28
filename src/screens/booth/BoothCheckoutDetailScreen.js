@@ -2,34 +2,33 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import { getBoothCheckout } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
+import { useLoader } from '../../context/LoaderContext';
 import { styles } from '../../styles/commonStyles';
 
 export const BoothCheckoutDetailScreen = ({ pop, push, checkoutId }) => {
   const [checkout, setCheckout] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState('');
+  const { withLoader } = useLoader();
 
   useEffect(() => {
     let active = true;
 
     const loadCheckout = async () => {
-      setLoading(true);
       setError('');
 
       try {
-        const response = await getBoothCheckout(checkoutId);
+        const response = await withLoader(getBoothCheckout(checkoutId));
         if (!active) {
           return;
         }
 
         setCheckout(response.checkout);
+        setHasLoaded(true);
       } catch (loadError) {
         if (active) {
           setError(loadError.message || 'Unable to load checkout');
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
+          setHasLoaded(true);
         }
       }
     };
@@ -39,7 +38,7 @@ export const BoothCheckoutDetailScreen = ({ pop, push, checkoutId }) => {
     return () => {
       active = false;
     };
-  }, [checkoutId]);
+  }, [checkoutId, withLoader]);
 
   const totalItems = useMemo(
     () => (checkout?.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
@@ -53,13 +52,7 @@ export const BoothCheckoutDetailScreen = ({ pop, push, checkoutId }) => {
       onBack={pop}
       backgroundColor="#eff6ff"
     >
-      {loading ? (
-        <View style={styles.formCard}>
-          <Text style={styles.cardSubtitle}>Loading checkout...</Text>
-        </View>
-      ) : null}
-
-      {!loading && checkout ? (
+      {checkout ? (
         <>
           <View style={styles.checkoutSummaryCard}>
             <View style={styles.checkoutSummaryHeader}>
@@ -104,7 +97,7 @@ export const BoothCheckoutDetailScreen = ({ pop, push, checkoutId }) => {
         </>
       ) : null}
 
-      {!loading && !checkout ? (
+      {hasLoaded && !checkout ? (
         <View style={styles.formCard}>
           <Text style={[styles.cardTitle, { textAlign: 'center' }]}>Checkout not found</Text>
           <Text style={[styles.helperText, { textAlign: 'center' }]}>This sale record is missing from the current mock store.</Text>

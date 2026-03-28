@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getBoothProductsByFilter, updateBoothProduct } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
+import { useLoader } from '../../context/LoaderContext';
 import { generateBoothProductLabel, isBoothProductPrinted } from '../../services/boothPrintService';
 import { styles } from '../../styles/commonStyles';
 
@@ -12,32 +13,30 @@ export const BoothDetailsScreen = ({ pop, push, boothId }) => {
   const [search, setSearch] = useState('');
   const [booth, setBooth] = useState(null);
   const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState('');
+  const { withLoader } = useLoader();
 
   useEffect(() => {
     let active = true;
 
     const loadProducts = async () => {
-      setLoading(true);
       setError('');
 
       try {
-        const response = await getBoothProductsByFilter({ boothId, status, search });
+        const response = await withLoader(getBoothProductsByFilter({ boothId, status, search }));
         if (!active) {
           return;
         }
 
         setBooth(response.booth);
         setProducts(response.products);
+        setHasLoaded(true);
       } catch (loadError) {
         if (active) {
           setError(loadError.message || 'Unable to load booth products');
           setProducts([]);
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
+          setHasLoaded(true);
         }
       }
     };
@@ -47,14 +46,15 @@ export const BoothDetailsScreen = ({ pop, push, boothId }) => {
     return () => {
       active = false;
     };
-  }, [boothId, search, status]);
+  }, [boothId, search, status, withLoader]);
 
   const refreshProduct = async (productId, updates, successMessage) => {
-    await updateBoothProduct(productId, updates);
+    await withLoader(updateBoothProduct(productId, updates));
     Alert.alert('Updated', successMessage);
-    const response = await getBoothProductsByFilter({ boothId, status, search });
+    const response = await withLoader(getBoothProductsByFilter({ boothId, status, search }));
     setBooth(response.booth);
     setProducts(response.products);
+    setHasLoaded(true);
   };
 
   const printLabel = async (product) => {
@@ -105,13 +105,7 @@ export const BoothDetailsScreen = ({ pop, push, boothId }) => {
         </View>
       </View>
 
-      {loading ? (
-        <View style={styles.formCard}>
-          <Text style={styles.cardSubtitle}>Loading products...</Text>
-        </View>
-      ) : null}
-
-      {!loading && products.length > 0
+      {products.length > 0
         ? products.map((item) => (
             <View key={item.id} style={styles.itemRow}>
               <View style={styles.itemImage} />
@@ -164,7 +158,7 @@ export const BoothDetailsScreen = ({ pop, push, boothId }) => {
           ))
         : null}
 
-      {!loading && products.length === 0 ? (
+      {hasLoaded && products.length === 0 ? (
         <View style={styles.formCard}>
           <Text style={[styles.cardTitle, { textAlign: 'center' }]}>No products found</Text>
           <Text style={[styles.helperText, { textAlign: 'center' }]}>No products match the selected tab and search criteria.</Text>

@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 
 const LoaderContext = createContext(null);
 
@@ -37,10 +37,8 @@ const overlayStyles = StyleSheet.create({
 
 export const LoaderProvider = ({ children }) => {
   const [pendingCount, setPendingCount] = useState(0);
-  const [message, setMessage] = useState('Loading...');
 
-  const showLoader = useCallback((nextMessage = 'Loading...') => {
-    setMessage(nextMessage);
+  const showLoader = useCallback(() => {
     setPendingCount((count) => count + 1);
   }, []);
 
@@ -49,8 +47,8 @@ export const LoaderProvider = ({ children }) => {
   }, []);
 
   const withLoader = useCallback(
-    async (task, nextMessage = 'Loading...') => {
-      showLoader(nextMessage);
+    async (task) => {
+      showLoader();
 
       try {
         return await task;
@@ -78,7 +76,6 @@ export const LoaderProvider = ({ children }) => {
         <View pointerEvents="auto" style={overlayStyles.backdrop}>
           <View style={overlayStyles.card}>
             <Image source={loaderGif} style={overlayStyles.gif} />
-            <Text style={overlayStyles.text}>{message}</Text>
           </View>
         </View>
       ) : null}

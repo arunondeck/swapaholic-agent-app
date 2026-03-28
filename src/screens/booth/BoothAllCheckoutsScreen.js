@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getAllBoothCheckouts } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
+import { useLoader } from '../../context/LoaderContext';
 import { styles } from '../../styles/commonStyles';
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
@@ -33,8 +34,9 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
   const [checkouts, setCheckouts] = useState([]);
   const [summary, setSummary] = useState({ totalCheckouts: 0, totalCartValue: 0, totalItemsSold: 0 });
   const [totalCount, setTotalCount] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState('');
+  const { withLoader } = useLoader();
 
   const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
   const safePage = Math.min(page, totalPages);
@@ -43,16 +45,17 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
     let active = true;
 
     const loadCheckouts = async () => {
-      setLoading(true);
       setError('');
 
       try {
-        const response = await getAllBoothCheckouts({
-          startDate: toStartOfDayIso(startDate),
-          endDate: toEndOfDayIso(endDate),
-          page: safePage,
-          perPage,
-        });
+        const response = await withLoader(
+          getAllBoothCheckouts({
+            startDate: toStartOfDayIso(startDate),
+            endDate: toEndOfDayIso(endDate),
+            page: safePage,
+            perPage,
+          })
+        );
 
         if (!active) {
           return;
@@ -61,14 +64,12 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
         setCheckouts(response.checkouts);
         setSummary(response.aggregates);
         setTotalCount(response.totalCount);
+        setHasLoaded(true);
       } catch (loadError) {
         if (active) {
           setError(loadError.message || 'Unable to load checkouts');
           setCheckouts([]);
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
+          setHasLoaded(true);
         }
       }
     };
@@ -78,7 +79,7 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
     return () => {
       active = false;
     };
-  }, [endDate, perPage, safePage, startDate]);
+  }, [endDate, perPage, safePage, startDate, withLoader]);
 
   return (
     <ScreenShell title="All Checkouts" subtitle={error || 'Checkout summary and list'} onBack={pop} backgroundColor="#f8fafc">
@@ -163,20 +164,14 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
         </View>
       </View>
 
-      {loading ? (
-        <View style={styles.formCard}>
-          <Text style={styles.cardSubtitle}>Loading checkouts...</Text>
-        </View>
-      ) : null}
-
-      {!loading && checkouts.length === 0 ? (
+      {hasLoaded && checkouts.length === 0 ? (
         <View style={styles.formCard}>
           <Text style={[styles.cardTitle, { textAlign: 'center' }]}>No checkouts found</Text>
           <Text style={[styles.helperText, { textAlign: 'center' }]}>No booth sales match the selected date range.</Text>
         </View>
       ) : null}
 
-      {!loading && checkouts.length > 0 ? (
+      {checkouts.length > 0 ? (
         <View style={styles.checkoutList}>
           {checkouts.map((checkout, index) => {
             const itemCount = (checkout.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);

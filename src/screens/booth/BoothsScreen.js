@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getSellerBooths } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
+import { useLoader } from '../../context/LoaderContext';
 import { styles } from '../../styles/commonStyles';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
@@ -25,8 +26,9 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
   const [perPage, setPerPage] = useState(25);
   const [booths, setBooths] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState('');
+  const { withLoader } = useLoader();
 
   const cycleTabs = useMemo(() => cycleTabsByStatus[status] || ['all'], [status]);
   const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
@@ -42,26 +44,23 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
     let active = true;
 
     const loadBooths = async () => {
-      setLoading(true);
       setError('');
 
       try {
-        const response = await getSellerBooths({ status, cycle, search, page: safePage, perPage });
+        const response = await withLoader(getSellerBooths({ status, cycle, search, page: safePage, perPage }));
         if (!active) {
           return;
         }
 
         setBooths(response.booths);
         setTotalCount(response.totalCount);
+        setHasLoaded(true);
       } catch (loadError) {
         if (active) {
           setError(loadError.message || 'Unable to load booths');
           setBooths([]);
           setTotalCount(0);
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
+          setHasLoaded(true);
         }
       }
     };
@@ -71,7 +70,7 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
     return () => {
       active = false;
     };
-  }, [cycle, perPage, safePage, search, status]);
+  }, [cycle, perPage, safePage, search, status, withLoader]);
 
   return (
     <ScreenShell title="Booths" subtitle={error || 'Browse and manage booth approvals'} onBack={pop} backgroundColor="#f1f5f9">
@@ -123,13 +122,7 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
         style={styles.input}
       />
 
-      {loading ? (
-        <View style={styles.formCard}>
-          <Text style={styles.cardSubtitle}>Loading booths...</Text>
-        </View>
-      ) : null}
-
-      {!loading && booths.length > 0
+      {booths.length > 0
         ? booths.map((booth) => (
             <TouchableOpacity key={booth.id} style={styles.listItem} onPress={() => push('boothDetails', { boothId: booth.id })}>
               <Text style={styles.cardTitle}>{booth.name}</Text>
@@ -149,7 +142,7 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
           ))
         : null}
 
-      {!loading && booths.length === 0 ? (
+      {hasLoaded && booths.length === 0 ? (
         <View style={styles.formCard}>
           <Text style={[styles.cardTitle, { textAlign: 'center' }]}>No booths found</Text>
           <Text style={[styles.helperText, { textAlign: 'center' }]}>Adjust your filters or search to widen the results.</Text>
