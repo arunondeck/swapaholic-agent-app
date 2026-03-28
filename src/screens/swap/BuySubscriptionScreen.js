@@ -5,6 +5,7 @@ import { Card } from '../../components/Card';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
 import { calculateBuyItemsPaymentSummary } from '../../services/checkoutPricingService';
+import { useAppSessionStore } from '../../store/appSessionStore';
 import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 
@@ -31,6 +32,7 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
   const shopItemsSubscriptions = useSwapStore((state) => state.shopItemsSubscriptions);
   const fetchShopSubscriptions = useSwapStore((state) => state.fetchShopSubscriptions);
   const activeCustomer = useSwapStore((state) => state.activeCustomer);
+  const shopCustomerId = useAppSessionStore((state) => state.shopCustomerId);
 
   useEffect(() => {
     let active = true;
@@ -110,11 +112,11 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
       return;
     }
 
-    const srUserId = activeCustomer?.loginResponse?.customer?.id || activeCustomer?.details?.id || customer?.id || '';
+    const srUserId = shopCustomerId || '';
     const customerToken = activeCustomer?.token || activeCustomer?.loginResponse?.token || '';
 
     if (!srUserId) {
-      setNotice('Unable to find the logged-in user id. Please login again.');
+      setNotice('Unable to find the logged-in swap user id. Please refresh the app session.');
       return;
     }
     if (!customerToken) {

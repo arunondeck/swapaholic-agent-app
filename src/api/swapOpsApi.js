@@ -40,6 +40,7 @@ import {
   getStoredBuyPointsCustomerId,
   getStoredBuyPointsEmail,
   getStoredBuyPointsToken,
+  getStoredShopCustomerId,
   getStoredShopToken,
 } from '../store/appSessionStorage';
 import { buildCheckoutPointsSubscriptionPayload, getPointsSubscription } from '../services/checkoutPricingService';
@@ -915,7 +916,18 @@ const resolveBuyPointsSession = async () => {
   };
 };
 
-const buyPointsForCheckout = async ({ requiredPoints, paymentMethod, authToken, customerId }) => {
+const resolveSwapSrUserId = async () => {
+  const cachedSession = getCachedStoredAppSession();
+  const srUserId = cachedSession?.shopCustomerId || (await getStoredShopCustomerId());
+
+  if (!srUserId) {
+    throw new Error('Failed to resolve swap sr_user_id.');
+  }
+
+  return srUserId;
+};
+
+const buyPointsForCheckout = async ({ requiredPoints, paymentMethod, authToken }) => {
   if (requiredPoints <= 0) {
     throw new Error('Required points must be greater than zero.');
   }
@@ -928,10 +940,11 @@ const buyPointsForCheckout = async ({ requiredPoints, paymentMethod, authToken, 
   }
 
   const payableSubscription = buildCheckoutPointsSubscriptionPayload(subscription, requiredPoints).subscription;
+  const srUserId = await resolveSwapSrUserId();
 
   const response = await saveShopSubscription({
     paymentMode: paymentMethod,
-    srUserId: customerId,
+    srUserId,
     subscription: payableSubscription,
     authToken,
   });
@@ -1080,13 +1093,11 @@ export const placeSwapCheckoutOrder = async ({
   let resolvedSubscribeId = subscribeId;
   let authToken = '';
   let availablePoints = 0;
-  let customerId = '';
 
   if (mode === 'customer') {
     const session = await authenticateCustomer(email);
     const profile = session?.profile || null;
     resolvedEmail = session?.email || email;
-    customerId = session?.loginResponse?.customer?.id || '';
     authToken = session?.loginResponse?.token || '';
     availablePoints = toPointsValue(profile?.points || profile?.total_available_points_c || '0');
 
@@ -1100,21 +1111,18 @@ export const placeSwapCheckoutOrder = async ({
         requiredPoints: requiredTopUpPoints,
         paymentMethod,
         authToken,
-        customerId,
       });
       resolvedSubscribeId = purchase.subscribeId;
     }
   } else {
     const buyPointsSession = await resolveBuyPointsSession();
     resolvedEmail = buyPointsSession.email;
-    customerId = buyPointsSession.customerId;
     authToken = buyPointsSession.token;
 
     const purchase = await buyPointsForCheckout({
       requiredPoints: totalPoints,
       paymentMethod,
       authToken,
-      customerId,
     });
     resolvedSubscribeId = purchase.subscribeId;
   }
@@ -1419,9 +1427,24 @@ export const saveShopSubscription = async ({
     throw new Error('Invalid payment mode. Expected cash, card, or paynow.');
   }
 
+  const path = `subscribes/save/shop/${normalizedPaymentMode}`;
+  const payload = {
+    sr_user_id: srUserId,
+    subscription,
+    add_ons: addOns,
+    type,
+    code_c: code,
+    auto_renew_c: autoRenew,
+  };
+
   if (SWAP_USE_MOCK) {
     await delay();
-    return {
+    console.log('[swapApi] saveShopSubscription mock request', {
+      useMock: true,
+      path,
+      payload,
+    });
+    const response = {
       status: true,
       success: {
         code: 'SUBSCRIBE-201',
@@ -1440,22 +1463,38 @@ export const saveShopSubscription = async ({
       error: null,
       status_code: 200,
     };
+    console.log('[swapApi] saveShopSubscription mock response', response);
+    return response;
   }
 
-  return postJson(
-    `subscribes/save/shop/${normalizedPaymentMode}`,
-    {
-      sr_user_id: srUserId,
-      subscription,
-      add_ons: addOns,
-      type,
-      code_c: code,
-      auto_renew_c: autoRenew,
-    },
-    true,
-    authToken ? { Authorization: `Bearer ${authToken}` } : {},
-    authToken
-  );
+  const url = buildUrl(path);
+
+  console.log('[swapApi] saveShopSubscription request', {
+    useMock: false,
+    method: 'POST',
+    url,
+    payload,
+  });
+
+  try {
+    const response = await postJson(
+      path,
+      payload,
+      true,
+      authToken ? { Authorization: `Bearer ${authToken}` } : {},
+      authToken
+    );
+    console.log('[swapApi] saveShopSubscription response', response);
+    return response;
+  } catch (error) {
+    console.error('[swapApi] saveShopSubscription error', {
+      method: 'POST',
+      url,
+      payload,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 };
 
 /**
