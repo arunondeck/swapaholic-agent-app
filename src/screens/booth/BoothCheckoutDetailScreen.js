@@ -61,20 +61,24 @@ export const BoothCheckoutDetailScreen = ({ pop, push, checkoutId }) => {
 
       {!loading && checkout ? (
         <>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summarySubheading}>Summary</Text>
-            <View style={[styles.statsGrid, { marginTop: 10 }]}>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Total Items</Text>
-                <Text style={styles.statValue}>{totalItems}</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Total</Text>
-                <Text style={styles.statValue}>${Number(checkout.Cart_value || 0).toFixed(2)}</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Payment</Text>
-                <Text style={styles.statValue}>{checkout.Booth_payment_method?.method || 'NA'}</Text>
+          <View style={styles.checkoutSummaryCard}>
+            <View style={styles.checkoutSummaryHeader}>
+              <Text style={styles.checkoutSummaryHeaderText}>Summary</Text>
+            </View>
+            <View style={styles.checkoutSummaryBody}>
+              <View style={styles.statsGrid}>
+                <View style={styles.statCard}>
+                  <Text style={styles.statLabel}>Total Items</Text>
+                  <Text style={styles.statValue}>{totalItems}</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statLabel}>Total</Text>
+                  <Text style={styles.statValue}>${Number(checkout.Cart_value || 0).toFixed(2)}</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statLabel}>Payment</Text>
+                  <Text style={styles.statValue}>{checkout.Booth_payment_method?.method || 'NA'}</Text>
+                </View>
               </View>
             </View>
           </View>

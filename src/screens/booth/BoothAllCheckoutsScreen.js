@@ -112,21 +112,25 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
         </View>
       </View>
 
-      <View style={styles.summaryCard}>
-        <Text style={styles.summarySubheading}>Checkout Summary</Text>
-        <Text style={styles.summaryText}>{startDate || 'Earliest'} - {endDate || 'Latest'}</Text>
-        <View style={[styles.statsGrid, { marginTop: 10 }]}>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Total Checkouts</Text>
-            <Text style={styles.statValue}>{summary.totalCheckouts}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Total Amount</Text>
-            <Text style={styles.statValue}>${Number(summary.totalCartValue || 0).toFixed(2)}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Items Sold</Text>
-            <Text style={styles.statValue}>{summary.totalItemsSold}</Text>
+      <View style={styles.checkoutSummaryCard}>
+        <View style={styles.checkoutSummaryHeader}>
+          <Text style={styles.checkoutSummaryHeaderText}>Checkout Summary</Text>
+        </View>
+        <View style={styles.checkoutSummaryBody}>
+          <Text style={styles.summaryText}>{startDate || 'Earliest'} - {endDate || 'Latest'}</Text>
+          <View style={styles.statsGrid}>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>Total Checkouts</Text>
+              <Text style={styles.statValue}>{summary.totalCheckouts}</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>Total Amount</Text>
+              <Text style={styles.statValue}>${Number(summary.totalCartValue || 0).toFixed(2)}</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>Items Sold</Text>
+              <Text style={styles.statValue}>{summary.totalItemsSold}</Text>
+            </View>
           </View>
         </View>
       </View>
@@ -172,11 +176,17 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
         </View>
       ) : null}
 
-      {!loading
-        ? checkouts.map((checkout) => {
+      {!loading && checkouts.length > 0 ? (
+        <View style={styles.checkoutList}>
+          {checkouts.map((checkout, index) => {
             const itemCount = (checkout.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+            const isLast = index === checkouts.length - 1;
             return (
-              <TouchableOpacity key={checkout.id} style={styles.listItem} onPress={() => push('boothCheckoutDetail', { checkoutId: checkout.id })}>
+              <TouchableOpacity
+                key={checkout.id}
+                style={[styles.checkoutListItem, isLast && styles.checkoutListItemLast]}
+                onPress={() => push('boothCheckoutDetail', { checkoutId: checkout.id })}
+              >
                 <Text style={styles.itemMeta}>{new Date(checkout.checkout_date).toLocaleString()}</Text>
                 <View style={styles.row}>
                   <Text style={[styles.cardTitle, { color: '#2563eb' }]}>#{checkout.id}</Text>
@@ -186,8 +196,9 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
                 <Text style={styles.helperText}>{checkout.Booth_payment_method?.method || 'Unknown payment method'}</Text>
               </TouchableOpacity>
             );
-          })
-        : null}
+          })}
+        </View>
+      ) : null}
     </ScreenShell>
   );
 };
