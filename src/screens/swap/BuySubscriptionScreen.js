@@ -4,6 +4,7 @@ import { getCustomerProfile, saveShopSubscription } from '../../api/swapOpsApi';
 import { Card } from '../../components/Card';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
+import { calculateBuyItemsPaymentSummary } from '../../services/checkoutPricingService';
 import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 
@@ -27,8 +28,8 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const { withLoader } = useLoader();
-  const shopPointsSubscriptions = useSwapStore((state) => state.shopPointsSubscriptions);
-  const fetchShopPointsSubscriptions = useSwapStore((state) => state.fetchShopPointsSubscriptions);
+  const shopItemsSubscriptions = useSwapStore((state) => state.shopItemsSubscriptions);
+  const fetchShopSubscriptions = useSwapStore((state) => state.fetchShopSubscriptions);
   const activeCustomer = useSwapStore((state) => state.activeCustomer);
 
   useEffect(() => {
@@ -40,7 +41,7 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
         const [profile, subscriptions] = await withLoader(
           Promise.all([
             getCustomerProfile(customerEmail),
-            shopPointsSubscriptions.length ? Promise.resolve(shopPointsSubscriptions) : fetchShopPointsSubscriptions(),
+            shopItemsSubscriptions.length ? Promise.resolve(shopItemsSubscriptions) : fetchShopSubscriptions().then((data) => data.shopItemsSubscriptions),
           ]),
           'Loading subscription options...'
         );
@@ -51,7 +52,7 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
 
         setCustomer(profile);
         if (!subscriptions?.length) {
-          setError('No points subscription is available right now.');
+          setError('No item subscription is available right now.');
         }
       } catch (loadError) {
         if (active) {
@@ -65,15 +66,20 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
     return () => {
       active = false;
     };
-  }, [customerEmail, fetchShopPointsSubscriptions, shopPointsSubscriptions, withLoader]);
+  }, [customerEmail, fetchShopSubscriptions, shopItemsSubscriptions, withLoader]);
 
-  const selectedSubscription = useMemo(
-    () => shopPointsSubscriptions.find((subscription) => subscription?.type_c === 'points') || shopPointsSubscriptions[0] || null,
-    [shopPointsSubscriptions]
-  );
   const itemCount = useMemo(() => parseWholeNumber(itemCountInput), [itemCountInput]);
-  const unitPrice = useMemo(() => Number.parseFloat(String(selectedSubscription?.price_c || '0')) || 0, [selectedSubscription?.price_c]);
-  const calculatedPrice = useMemo(() => unitPrice * itemCount, [itemCount, unitPrice]);
+  const paymentSummary = useMemo(
+    () =>
+      calculateBuyItemsPaymentSummary({
+        itemCount,
+        shopItemsSubscriptions,
+      }),
+    [itemCount, shopItemsSubscriptions]
+  );
+  const selectedSubscription = paymentSummary.selectedSubscription;
+  const unitPrice = paymentSummary.perItemPayable;
+  const calculatedPrice = paymentSummary.cashPayable;
 
   if (!customer) {
     return (
@@ -117,9 +123,7 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
     }
 
     const payloadSubscription = {
-      ...selectedSubscription,
-      number_of_items_c: String(itemCount),
-      cost_c: Number(calculatedPrice.toFixed(2)),
+      ...paymentSummary.payableSubscription,
     };
 
     try {
@@ -146,7 +150,7 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
 
   return (
     <ScreenShell title="Buy Subscription" subtitle={`Purchase flow for ${customer.name}`} onBack={pop} backgroundColor="#ffe4e1">
-      <Card title="Flexi Swap Shopper" subtitle={selectedSubscription?.name || 'Buy Points'} />
+      <Card title="Flexi Swap Shopper" subtitle={selectedSubscription?.name || 'Buy Items'} />
       <Text style={styles.selectLabel}>Number of items</Text>
       <TextInput
         keyboardType="numeric"

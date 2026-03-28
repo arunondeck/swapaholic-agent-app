@@ -45,6 +45,7 @@ const getActivePackageDisplayName = (shopSubscribe, fallbackName = '') => {
 
 export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   const activeCustomer = useSwapStore((state) => state.activeCustomer);
+  const fetchShopSubscriptions = useSwapStore((state) => state.fetchShopSubscriptions);
   const activeEmail = customerEmail || activeCustomer?.email || '';
   const [customer, setCustomer] = useState(null);
   const [activeSubscription, setActiveSubscription] = useState(null);
@@ -53,6 +54,10 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const [error, setError] = useState('');
   const { withLoader } = useLoader();
+
+  useEffect(() => {
+    fetchShopSubscriptions().catch(() => null);
+  }, [fetchShopSubscriptions]);
 
   useEffect(() => {
     let active = true;

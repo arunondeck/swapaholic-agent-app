@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { getAllSubscriptions, getShopPointsSubscriptions } from '../api/swapOpsApi';
+import { getAllSubscriptions, getShopItemSubscriptions, getShopPointsSubscriptions } from '../api/swapOpsApi';
 
 export const useSwapStore = create((set, get) => ({
   allSubscriptions: [],
@@ -10,6 +10,10 @@ export const useSwapStore = create((set, get) => ({
   shopPointsSubscriptionsLoaded: false,
   shopPointsSubscriptionsLoading: false,
   shopPointsSubscriptionsError: '',
+  shopItemsSubscriptions: [],
+  shopItemsSubscriptionsLoaded: false,
+  shopItemsSubscriptionsLoading: false,
+  shopItemsSubscriptionsError: '',
   activeCustomer: null,
   setActiveCustomerSession: (session) => {
     const email = session?.email || session?.profile?.email || '';
@@ -74,5 +78,42 @@ export const useSwapStore = create((set, get) => ({
       });
       throw error;
     }
+  },
+  fetchShopItemSubscriptions: async ({ force = false } = {}) => {
+    if (!force && (get().shopItemsSubscriptionsLoaded || get().shopItemsSubscriptionsLoading)) {
+      return get().shopItemsSubscriptions;
+    }
+
+    set({
+      shopItemsSubscriptionsLoading: true,
+      shopItemsSubscriptionsError: '',
+    });
+
+    try {
+      const shopItemsSubscriptions = await getShopItemSubscriptions();
+      set({
+        shopItemsSubscriptions,
+        shopItemsSubscriptionsLoaded: true,
+        shopItemsSubscriptionsLoading: false,
+      });
+      return shopItemsSubscriptions;
+    } catch (error) {
+      set({
+        shopItemsSubscriptionsLoading: false,
+        shopItemsSubscriptionsError: error?.message || 'Failed to fetch shop item subscriptions.',
+      });
+      throw error;
+    }
+  },
+  fetchShopSubscriptions: async ({ force = false } = {}) => {
+    const [shopPointsSubscriptions, shopItemsSubscriptions] = await Promise.all([
+      get().fetchShopPointsSubscriptions({ force }),
+      get().fetchShopItemSubscriptions({ force }),
+    ]);
+
+    return {
+      shopPointsSubscriptions,
+      shopItemsSubscriptions,
+    };
   },
 }));

@@ -1358,7 +1358,7 @@ export const reviewProduct = async ({ productId, action, notes = '', reviewedBy 
 /**
  * Get subscriptions list by tenancy.
  * Endpoint: POST /{api_ver}/subscriptions/list
- * Request: { tenancy: 'SWAP.SUB.TYPE.ITEMS.STORE' | 'SWAP.SUB.TYPE.POINTS.SHOP' | 'SWAP.SUB.TYPE.CONVERSIONS.SHOP' }
+ * Request: { tenancy: 'SWAP.SUB.TYPE.ITEMS.STORE' | 'SWAP.SUB.TYPE.ITEMS.SHOP' | 'SWAP.SUB.TYPE.POINTS.SHOP' | 'SWAP.SUB.TYPE.CONVERSIONS.SHOP' }
  * @param {import('../types/swapTypes').SwapSubscriptionTenancy} tenancy
  * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<Record<string, unknown>> | Record<string, unknown>>}
  */
@@ -1388,6 +1388,11 @@ export const getAllSubscriptions = async () => {
 
 export const getShopPointsSubscriptions = async (authToken = '') => {
   const response = await getSubscriptionsList('SWAP.SUB.TYPE.POINTS.SHOP', authToken);
+  return getResponseData(response).subscriptions || EMPTY_ARRAY;
+};
+
+export const getShopItemSubscriptions = async (authToken = '') => {
+  const response = await getSubscriptionsList('SWAP.SUB.TYPE.ITEMS.SHOP', authToken);
   return getResponseData(response).subscriptions || EMPTY_ARRAY;
 };
 

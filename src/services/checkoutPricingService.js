@@ -15,6 +15,13 @@ export const getPointsSubscription = (subscriptions = []) =>
       String(subscription?.sub_type_c || '').toLowerCase() === 'add_on_points'
   ) || subscriptions[0] || null;
 
+export const getItemsSubscription = (subscriptions = []) =>
+  subscriptions.find(
+    (subscription) =>
+      String(subscription?.type_c || '').toLowerCase() === 'items' ||
+      String(subscription?.sub_type_c || '').toLowerCase() === 'add_on_items'
+  ) || subscriptions[0] || null;
+
 export const computeSubscriptionPayables = (subscription, noOfItems = 0) => {
   const normalizedItemCount = toWholeNumber(noOfItems);
   const basePrice = toCurrencyAmount(subscription?.price_c);
@@ -70,6 +77,24 @@ export const buildCheckoutPointsSubscriptionPayload = (subscription, pointsToBuy
   };
 };
 
+export const buildCheckoutItemsSubscriptionPayload = (subscription, itemsToBuy = 0) => {
+  const normalizedItemsToBuy = toWholeNumber(itemsToBuy);
+  const payables = computeSubscriptionPayables(subscription, normalizedItemsToBuy);
+
+  return {
+    subscription: {
+      ...subscription,
+      cost_c: Number(payables.totalCost.toFixed(2)),
+      number_of_items_c: String(normalizedItemsToBuy),
+      number_of_points_c: String(toWholeNumber(subscription?.number_of_points_c)),
+      number_of_accepted_items_c: 0,
+      number_of_rejected_items_c: 0,
+    },
+    totalCost: Number(payables.totalCost.toFixed(2)),
+    peritemCost: Number(payables.peritemCost.toFixed(2)),
+  };
+};
+
 export const calculateCheckoutPaymentSummary = ({
   mode = 'customer',
   cartTotal = 0,
@@ -90,6 +115,23 @@ export const calculateCheckoutPaymentSummary = ({
     pointsToBuy,
     cashPayable: payable?.totalCost || 0,
     perPointPayable: payable?.peritemCost || 0,
+    selectedSubscription,
+    payableSubscription: payable?.subscription || null,
+  };
+};
+
+export const calculateBuyItemsPaymentSummary = ({
+  itemCount = 0,
+  shopItemsSubscriptions = [],
+}) => {
+  const normalizedItemCount = toWholeNumber(itemCount);
+  const selectedSubscription = getItemsSubscription(shopItemsSubscriptions);
+  const payable = selectedSubscription ? buildCheckoutItemsSubscriptionPayload(selectedSubscription, normalizedItemCount) : null;
+
+  return {
+    itemCount: normalizedItemCount,
+    cashPayable: payable?.totalCost || 0,
+    perItemPayable: payable?.peritemCost || 0,
     selectedSubscription,
     payableSubscription: payable?.subscription || null,
   };

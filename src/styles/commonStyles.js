@@ -300,24 +300,31 @@ export const styles = StyleSheet.create({
   overviewTable: {
     marginTop: -16,
     marginHorizontal: -16,
-    backgroundColor: '#d9ebd2',
-    paddingVertical: 8,
+    backgroundColor: '#6ab261',
+    borderColor: '#000',
+    borderBottomWidth: 1,
   },
   overviewTableRow: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    // backgroundColor: 'rgba(138, 233, 87, 0.5)',
+    borderBottomWidth: 1,
+    borderColor: '#fff',
   },
   overviewTableRowBorder: {
     marginTop: 8,
+    borderBottomWidth: 1,
+    borderColor: '#fff',
   },
   overviewTableCell: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingVertical: 18,
+    paddingVertical: 12,
     gap: 6,
   },
   overviewTableCellWithDivider: {
     marginRight: 1,
+    borderRightColor: '#fff',
+    borderRightWidth: 1,
   },
   overviewTableLabel: {
     fontSize: 12,
