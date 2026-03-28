@@ -113,6 +113,10 @@
  */
 
 /**
+ * @typedef {SwapCustomerSubscribe} swapCustomerSubscribe
+ */
+
+/**
  * @typedef {Object} SwapProduct
  * @property {string} id
  * @property {string} name
@@ -166,6 +170,10 @@
 
 /**
  * @typedef {SwapProduct} swapProducts
+ */
+
+/**
+ * @typedef {SwapSubscriptionPlan} swapSubscription
  */
 
 /**
@@ -235,7 +243,45 @@
  */
 
 /**
- * @typedef {{ id: string, subscriptionId: string, date: string, address: string, totalItems: number, remainingItems: number, items: Array<Record<string, string>> }} SwapPickup
+ * @typedef {Object} swapPickup
+ * @property {string} id
+ * @property {string} [name]
+ * @property {string} [trip_date_c]
+ * @property {string} [trip_time_c]
+ * @property {string} [number_of_items_c]
+ * @property {string} [extra_trip_c]
+ * @property {string} [status_c]
+ * @property {string} [unique_id_c]
+ * @property {string} [street_address_c]
+ * @property {string} [city_c]
+ * @property {string} [country_c]
+ * @property {string} [state_c]
+ * @property {string} [postal_code_c]
+ * @property {string} [apt_no_c]
+ * @property {string} [building_name_c]
+ * @property {string} [street_no_c]
+ * @property {string} [street_name_c]
+ * @property {string} [trip_id_c]
+ * @property {string} [date_entered]
+ * @property {string} [shop_visit_date_c]
+ * @property {string} [shop_visit_time_c]
+ * @property {string} [accepted_items_c]
+ * @property {string} [rejected_items_c]
+ * @property {swapCustomer[]} [customer]
+ * @property {swapCustomerSubscribe[]} [subscribe]
+ * @property {swapProducts[]} [customer_items]
+ * @property {SwapNamedEntity[]} [pickup_card]
+ * @property {string} [items_added]
+ * @property {string} subscriptionId
+ * @property {string} date
+ * @property {string} address
+ * @property {number} totalItems
+ * @property {number} remainingItems
+ * @property {swapProducts[]} items
+ */
+
+/**
+ * @typedef {swapPickup} SwapPickup
  */
 
 /**

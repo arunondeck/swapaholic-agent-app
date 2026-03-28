@@ -1,11 +1,21 @@
 import React, { useEffect } from 'react';
 import { Text, TouchableOpacity } from 'react-native';
-import { getPickupStatus } from '../../api/swapOpsApi';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
 import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
+
+const formatTripDateTime = (pickup) => {
+  const date = String(pickup?.trip_date_c || pickup?.date || '').trim();
+  const time = String(pickup?.trip_time_c || '').trim();
+
+  if (date && time) {
+    return `${date} | ${time}`;
+  }
+
+  return date || time || 'NA';
+};
 
 export const CustomerPickupsScreen = ({ pop, push, customerEmail }) => {
   const { withLoader } = useLoader();
@@ -57,12 +67,9 @@ export const CustomerPickupsScreen = ({ pop, push, customerEmail }) => {
           onPress={() => push('customerPickupDetail', { email: customer.email, pickupId: pickup.id })}
           style={styles.pressableListItem}
         >
-          <Row label="Pickup Id" value={pickup.id} />
-          <Row label="Status" value={getPickupStatus(pickup)} />
-          <Row label="Date" value={pickup.date} />
-          <Row label="Address" value={pickup.address} />
-          <Row label="Total Items" value={String(pickup.totalItems)} />
-          <Row label="Remaining Items" value={String(pickup.remainingItems)} />
+          <Row label="Pickup ID" value={pickup.unique_id_c || pickup.id} />
+          <Row label="Number of Items" value={String(pickup.number_of_items_c || pickup.totalItems || 0)} />
+          <Row label="Trip Date & Time" value={formatTripDateTime(pickup)} />
         </TouchableOpacity>
       ))}
     </ScreenShell>

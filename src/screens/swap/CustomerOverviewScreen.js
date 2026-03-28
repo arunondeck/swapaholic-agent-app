@@ -202,7 +202,7 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
           style={[styles.overviewTableRow, styles.overviewTableRowBorder]}
         >
           <View style={styles.overviewTableCell}>
-            <Text style={styles.overviewTableLabel}>Active Package</Text>
+            <Text style={styles.overviewTableLabel}>Latest Package</Text>
             <Text style={[styles.overviewTableValue, canOpenActiveSubscription ? styles.overviewTableLinkValue : null]}>
               {displayedPackageName}
             </Text>
@@ -283,6 +283,10 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
 
             <TouchableOpacity style={styles.overviewSecondaryActionButton} onPress={() => push('customerSubscriptions', { email: customer.email })}>
               <Text style={styles.overviewSecondaryActionText}>All Subscriptions</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.overviewSecondaryActionButton} onPress={() => push('customerPickups', { email: customer.email })}>
+              <Text style={styles.overviewSecondaryActionText}>All Pickups</Text>
             </TouchableOpacity>
           </View>
         ) : null}

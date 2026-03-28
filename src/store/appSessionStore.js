@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { checkCustomerSession, loginAsCustomer } from '../api/swapOpsApi';
+import { checkCustomerSession, loginAsCustomer, loginAsShopUser } from '../api/swapOpsApi';
 import { clearStoredAppSession, loadStoredAppSession, saveStoredAppSession } from './appSessionStorage';
 
 const SHOP_EMAIL = (process.env.EXPO_PUBLIC_SWAP_EMAIL || '').trim().toLowerCase();
@@ -39,6 +39,21 @@ const resolveSessionForEmail = async (storedToken, storedCustomerId, email) => {
   return {
     token,
     customerId,
+  };
+};
+
+const resolveShopOperatorSession = async (storedToken = '', storedCustomerId = '') => {
+  if (storedToken) {
+    return {
+      token: storedToken,
+      customerId: storedCustomerId,
+    };
+  }
+
+  const session = await loginAsShopUser();
+  return {
+    token: session?.token || '',
+    customerId: storedCustomerId,
   };
 };
 
@@ -90,7 +105,7 @@ export const useAppSessionStore = create((set, get) => ({
 
     try {
       const [shopSession, boothSession] = await Promise.all([
-        resolveSessionForEmail(get().shopToken, get().shopCustomerId, SHOP_EMAIL),
+        resolveShopOperatorSession(get().shopToken, get().shopCustomerId),
         resolveSessionForEmail(get().boothToken, get().boothCustomerId, BOOTH_EMAIL),
       ]);
 

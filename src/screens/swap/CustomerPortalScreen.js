@@ -9,7 +9,7 @@ import { styles } from '../../styles/commonStyles';
 export const CustomerPortalScreen = ({ push, pop }) => {
   const activeCustomer = useSwapStore((state) => state.activeCustomer);
   const setActiveCustomerSession = useSwapStore((state) => state.setActiveCustomerSession);
-  const [email, setEmail] = useState(activeCustomer?.email || 'arun.chembilath@gmail.com');
+  const [email, setEmail] = useState(activeCustomer?.email || 'callistmom@yahoo.com.sg');
   const [error, setError] = useState('');
   const { withLoader } = useLoader();
   const isEnabled = email.trim().length > 0;

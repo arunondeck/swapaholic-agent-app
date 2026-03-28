@@ -58,6 +58,8 @@ const SWAP_WALLET_API_URL = (process.env.EXPO_PUBLIC_SWAP_WALLET_API_URL || '').
 const SWAP_API_VERSION = process.env.EXPO_PUBLIC_SWAP_API_VERSION || '';
 const SWAP_USE_MOCK = (process.env.EXPO_PUBLIC_SWAP_USE_MOCK || 'true').toLowerCase() === 'true';
 const BOOTH_USE_MOCK = (process.env.EXPO_PUBLIC_BOOTH_USE_MOCK || process.env.EXPO_PUBLIC_SWAP_USE_MOCK || 'true').toLowerCase() === 'true';
+const DEFAULT_OPS_LOGIN_USERNAME = (process.env.DEFAULTOPS_LOGIN_USERNAME || process.env.DEFAULT_LOGIN_USERNAME || '').trim();
+const DEFAULT_OPS_LOGIN_PASSWORD = process.env.DEFAULTOPS_LOGIN_PASSWORD || process.env.DEFAULT_LOGIN_password || '';
 const APP_LOGIN_PATH = 'guests/customers/get-started';
 const APP_GUEST_REGISTER_PATH = 'guests/register';
 const APP_LOGIN_TENANCY = 'SWAP.AUTH.TYPE.EMAIL';
@@ -348,15 +350,84 @@ const mapApiSubscriptionItem = (item) => ({
   size: item?.size_c || item?.size || 'NA',
 });
 
+const toNamedEntity = (value, fallback = 'NA') => {
+  if (value && typeof value === 'object') {
+    return {
+      id: value.id || '',
+      name: value.name || fallback,
+      ...value,
+    };
+  }
+
+  const text = typeof value === 'string' && value.trim() ? value : fallback;
+  return {
+    id: '',
+    name: text,
+  };
+};
+
+const mapApiPickupCustomerItemToProduct = (item, pickup, customer) => ({
+  ...item,
+  images: Array.isArray(item?.images) ? item.images : EMPTY_ARRAY,
+  defect_area: item?.defect_area || null,
+  cart: item?.cart || null,
+  condition: item?.condition || null,
+  brand: toNamedEntity(item?.brand || item?.brand_c),
+  size: toNamedEntity(item?.size || item?.size_c),
+  style: toNamedEntity(item?.style || item?.style_c),
+  color: toNamedEntity(item?.color || item?.color_c),
+  user_segment: toNamedEntity(item?.user_segment || item?.user_segment_c),
+  category: toNamedEntity(item?.category || item?.category_c),
+  customer: customer || { id: '', name: 'Customer' },
+  pick_up: {
+    id: pickup?.id || '',
+    name: pickup?.name || pickup?.unique_id_c || pickup?.id || 'Pickup',
+  },
+});
+
 const mapApiPickupToPickup = (pickup) => ({
   id: pickup?.id || pickup?.pickup_id_c || '',
   subscriptionId: pickup?.subscribe_id_c || pickup?.subscription_id_c || '',
-  date: pickup?.date_entered || pickup?.pickup_date_c || 'NA',
-  address: pickup?.pickup_address_c || pickup?.address_c || 'NA',
+  date: pickup?.trip_date_c || pickup?.date_entered || pickup?.pickup_date_c || 'NA',
+  address: pickup?.address || pickup?.pickup_address_c || pickup?.address_c || 'NA',
   totalItems: toNumber(pickup?.number_of_items_c),
   remainingItems: toNumber(pickup?.remaining_items_c, toNumber(pickup?.number_of_items_c)),
   items: pickup?.items || EMPTY_ARRAY,
 });
+
+const mapApiPickupDetailToPickup = (pickup) => {
+  const customer = Array.isArray(pickup?.customer) ? pickup.customer[0] || null : pickup?.customer || null;
+  const subscribeList = Array.isArray(pickup?.subscribe) ? pickup.subscribe : EMPTY_ARRAY;
+  const items = (pickup?.customer_items || EMPTY_ARRAY).map((item) => mapApiPickupCustomerItemToProduct(item, pickup, customer));
+  const totalItems = toNumber(pickup?.number_of_items_c);
+  const itemsAdded = toNumber(pickup?.items_added, items.length);
+  const addressParts = [
+    pickup?.street_address_c,
+    pickup?.apt_no_c,
+    pickup?.building_name_c,
+    pickup?.street_no_c,
+    pickup?.street_name_c,
+    pickup?.city_c,
+    pickup?.state_c,
+    pickup?.postal_code_c,
+    pickup?.country_c,
+  ]
+    .filter((part) => typeof part === 'string' && part.trim())
+    .join(', ');
+
+  return {
+    ...pickup,
+    customer: customer ? [customer] : EMPTY_ARRAY,
+    subscribe: subscribeList,
+    customer_items: items,
+    subscriptionId: subscribeList[0]?.id || pickup?.subscribe_id_c || pickup?.subscription_id_c || '',
+    date: pickup?.trip_date_c || pickup?.date_entered || 'NA',
+    address: addressParts || pickup?.street_address_c || 'NA',
+    totalItems,
+    remainingItems: Math.max(0, toNumber(pickup?.remaining_items_c, totalItems - itemsAdded)),
+    items,
+  };
+};
 
 const mapMockCustomerToDetailResponse = (customer) => ({
   status: true,
@@ -790,6 +861,69 @@ export const loginAppUser = async (email, password, authToken = '') => {
   }
 
   return session;
+};
+
+export const loginAsShopUser = async () => {
+  if (!DEFAULT_OPS_LOGIN_USERNAME || !DEFAULT_OPS_LOGIN_PASSWORD) {
+    throw new Error('DEFAULTOPS_LOGIN_USERNAME/DEFAULTOPS_LOGIN_PASSWORD credentials are not configured.');
+  }
+
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return {
+      token: customerSuccessData.token,
+      user: {
+        id: 'mock-operator',
+        name: 'Operator',
+        user_type: 'operator',
+      },
+      response: {
+        status: true,
+        success: {
+          code: 'USR-001',
+          message: 'User logged in',
+          data: {
+            user_id: 'mock-operator',
+            user_type: 'operator',
+            name: 'Operator',
+            token: customerSuccessData.token,
+            state_hash: null,
+          },
+        },
+        error: null,
+        status_code: 200,
+      },
+    };
+  }
+
+  const response = await postJson(
+    'users/login',
+    {
+      username: DEFAULT_OPS_LOGIN_USERNAME,
+      password: DEFAULT_OPS_LOGIN_PASSWORD,
+    },
+    true,
+    {},
+    '',
+    'loginAsShopUser'
+  );
+
+  const data = response?.success?.data || {};
+  const token = data?.token || '';
+
+  if (!token) {
+    throw new Error('Failed to get operator token.');
+  }
+
+  return {
+    token,
+    user: {
+      id: data?.user_id || '',
+      user_type: data?.user_type || '',
+      name: data?.name || '',
+    },
+    response,
+  };
 };
 
 export const registerGuestSession = async () => {
@@ -1419,21 +1553,34 @@ export const getAllCustomerPickups = async (email) => {
     return getMockCustomerProfile(email).pickups || customerPickups;
   }
 
-  const session = await createCustomerSession(email);
-  const customerId = session?.loginResponse?.customer?.id;
+  const shopSession = await loginAsShopUser();
+  const shopToken = shopSession?.token || '';
+  const normalizedEmail = String(email || '').trim().toLowerCase();
 
-  if (!customerId) {
+  if (!normalizedEmail || !shopToken) {
     return EMPTY_ARRAY;
   }
 
-  const response = await postJson('pickups/list', {
-    tenancy: 'SWAP.PICKUPS.GET.CUST_ID',
-    customer_id_c: customerId,
-    max_results: 100,
-    offset: 0,
-  }, true, {}, '', 'getAllCustomerPickups');
+  const response = await postJson(
+    'users/pickups/list',
+    {
+      status_c: 'processing',
+      filter_tenancy: 'SWAP.PICKUP.FILTER.CUSTOMER_EMAIL',
+      customer_email: normalizedEmail,
+      sent_to_logistics: 'no',
+      sort_tenancy: 'SWAP.PICKUP.SORT.DATE_ENTERED',
+      sort_type: 'SWAP.PICKUP.SORT_TYPE.DESC',
+      max_results: 20,
+      offset: 0,
+      data_mode: '',
+    },
+    true,
+    {},
+    shopToken,
+    'getCustomerPickups'
+  );
 
-  return (getResponseData(response).pickups || []).map(mapApiPickupToPickup);
+  return (response?.pickups || EMPTY_ARRAY).map(mapApiPickupToPickup);
 };
 
 /**
@@ -1500,7 +1647,7 @@ export const getActivePackageDetails = async (email) => {
  * Get details of customer pickup.
  * @param {string} email
  * @param {string} pickupId
- * @returns {Promise<import('../types/swapTypes').SwapPickup>}
+ * @returns {Promise<import('../types/swapTypes').SwapPickup | null>}
  */
 export const getCustomerPickupDetails = async (email, pickupId) => {
   if (SWAP_USE_MOCK) {
@@ -1508,8 +1655,28 @@ export const getCustomerPickupDetails = async (email, pickupId) => {
     return getMockCustomerPickup(email, pickupId);
   }
 
-  const pickups = await getCustomerPickups(email);
-  return pickups.find((pickup) => pickup.id === pickupId) || pickups[0] || null;
+  const session = await createCustomerSession(email);
+  const customerToken = session?.loginResponse?.token || '';
+
+  if (!pickupId) {
+    return null;
+  }
+
+  const response = await postJson(
+    'pickups/details',
+    {
+      data_tenancy: 'SWAP.PICKUP.DATA_VIEW.DETAIL_PROTECTED',
+      detail_tenancy: 'SWAP.PICKUP.DETAIL_VIEW.ID',
+      id: pickupId,
+    },
+    true,
+    {},
+    customerToken,
+    'getCustomerPickupDetails'
+  );
+
+  const pickup = response?.pickup || null;
+  return pickup ? mapApiPickupDetailToPickup(pickup) : null;
 };
 
 /**

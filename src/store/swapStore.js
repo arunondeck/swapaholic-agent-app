@@ -286,15 +286,31 @@ export const useSwapStore = create((set, get) => ({
   fetchCustomerPickupDetailIfNeeded: async (email, pickupId, { force = false } = {}) => {
     const key = String(pickupId || '');
     const currentEntry = getEntryFromMap(get().currentCustomerData.pickupDetailsById, key);
+    const hasDetailedPickupData = (pickup) =>
+      Boolean(
+        pickup &&
+          (
+            Array.isArray(pickup?.customer_items) ||
+            Array.isArray(pickup?.customer) ||
+            Array.isArray(pickup?.subscribe) ||
+            Array.isArray(pickup?.items)
+          ) &&
+          (
+            (Array.isArray(pickup?.customer_items) && pickup.customer_items.length > 0) ||
+            (Array.isArray(pickup?.customer) && pickup.customer.length > 0) ||
+            (Array.isArray(pickup?.subscribe) && pickup.subscribe.length > 0) ||
+            (Array.isArray(pickup?.items) && pickup.items.length > 0)
+          )
+      );
 
-    if (!force && isCustomerCacheUsable(currentEntry, get().customerCacheTtlMs)) {
+    if (!force && isCustomerCacheUsable(currentEntry, get().customerCacheTtlMs) && hasDetailedPickupData(currentEntry?.data)) {
       return currentEntry.data;
     }
 
     const cachedPickupList = get().currentCustomerData.pickups;
     if (!force && isCustomerCacheUsable(cachedPickupList, get().customerCacheTtlMs)) {
       const derivedPickup = (cachedPickupList.data || []).find((pickup) => String(pickup?.id) === key) || null;
-      if (derivedPickup) {
+      if (hasDetailedPickupData(derivedPickup)) {
         set((state) => ({
           currentCustomerData: {
             ...state.currentCustomerData,

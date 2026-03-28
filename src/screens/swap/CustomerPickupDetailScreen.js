@@ -1,12 +1,22 @@
 import React, { useEffect } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
-import { formatRemainingItems, getPickupStatus } from '../../api/swapOpsApi';
 import { ProductCard } from '../../components/ProductCard';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
 import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
+
+const formatDateTime = (dateValue, timeValue = '') => {
+  const date = String(dateValue || '').trim();
+  const time = String(timeValue || '').trim();
+
+  if (date && time) {
+    return `${date} | ${time}`;
+  }
+
+  return date || time || 'NA';
+};
 
 export const CustomerPickupDetailScreen = ({ pop, push, customerEmail, pickupId }) => {
   const { withLoader } = useLoader();
@@ -50,15 +60,22 @@ export const CustomerPickupDetailScreen = ({ pop, push, customerEmail, pickupId 
     );
   }
 
+  const pickupUniqueId = pickup.unique_id_c || pickup.id || 'NA';
+  const subscribe = Array.isArray(pickup.subscribe) ? pickup.subscribe[0] || null : null;
+  const subscribeUniqueId = subscribe?.unique_id_c || subscribe?.id || pickup.subscriptionId || 'NA';
+  const subscribeName = subscribe?.name || 'NA';
+  const tripDateTime = formatDateTime(pickup.trip_date_c || pickup.date, pickup.trip_time_c);
+  const enteredDateTime = formatDateTime(pickup.date_entered, '');
+
   return (
-    <ScreenShell title={pickup.id} subtitle={`${customer.name} pickup details`} onBack={pop} backgroundColor="#ffe4e1">
+    <ScreenShell title={pickupUniqueId} subtitle={`${customer.name} pickup details`} onBack={pop} backgroundColor="#ffe4e1">
       <View style={styles.listItem}>
         <Text style={styles.sectionTitle}>Pickup Summary</Text>
-        <Row label="Subscription" value={pickup.subscriptionId} />
-        <Row label="Status" value={getPickupStatus(pickup)} />
-        <Row label="Date" value={pickup.date} />
-        <Row label="Total Items" value={String(pickup.totalItems)} />
-        <Row label="Remaining Items" value={formatRemainingItems(pickup.remainingItems)} />
+        <Row label="Pickup ID" value={pickupUniqueId} />
+        <Row label="Subscribe ID" value={subscribeUniqueId} />
+        <Row label="Trip Date & Time" value={tripDateTime} />
+        <Row label="Entered Date & Time" value={enteredDateTime} />
+        <Row label="Subscribe Name" value={subscribeName} />
       </View>
 
       <Text style={styles.sectionTitle}>Items Swapped In</Text>

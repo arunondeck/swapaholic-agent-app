@@ -63,14 +63,19 @@ When `EXPO_PUBLIC_SWAP_USE_MOCK=true`, all supported API methods return local mo
 
 ### 3.2) Get all customer pickups
 - Function: `getAllCustomerPickups(email)`
-- Endpoint: `POST /{api_ver}/pickups/list`
+- Endpoint: `POST /{api_ver}/users/pickups/list`
 - Body:
 ```json
 {
-  "tenancy": "SWAP.PICKUPS.GET.CUST_ID",
-  "customer_id_c": "<customer-id-from-login>",
-  "max_results": 100,
-  "offset": 0
+  "status_c": "processing",
+  "filter_tenancy": "SWAP.PICKUP.FILTER.CUSTOMER_EMAIL",
+  "customer_email": "<customer-email>",
+  "sent_to_logistics": "no",
+  "sort_tenancy": "SWAP.PICKUP.SORT.DATE_ENTERED",
+  "sort_type": "SWAP.PICKUP.SORT_TYPE.DESC",
+  "max_results": 20,
+  "offset": 0,
+  "data_mode": ""
 }
 ```
 
