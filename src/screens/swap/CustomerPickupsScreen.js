@@ -20,9 +20,12 @@ export const CustomerPickupsScreen = ({ pop, push, customerEmail }) => {
 
   useEffect(() => {
     const loadData = async () => {
+      const state = useSwapStore.getState();
+      const latestProfileEntry = state.currentCustomerData.profile;
+      const latestPickupsEntry = state.currentCustomerData.pickups;
       const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
       const pickupsPromise = fetchCustomerPickupsIfNeeded(customerEmail);
-      const hasUsableCache = canUseCache(profileEntry) && canUseCache(pickupsEntry);
+      const hasUsableCache = canUseCache(latestProfileEntry) && canUseCache(latestPickupsEntry);
 
       try {
         if (hasUsableCache) {
@@ -36,7 +39,7 @@ export const CustomerPickupsScreen = ({ pop, push, customerEmail }) => {
     };
 
     loadData();
-  }, [canUseCache, customerEmail, fetchCustomerPickupsIfNeeded, fetchCustomerProfileIfNeeded, pickupsEntry, profileEntry, withLoader]);
+  }, [canUseCache, customerEmail, fetchCustomerPickupsIfNeeded, fetchCustomerProfileIfNeeded, withLoader]);
 
   if (!customer) {
     return (

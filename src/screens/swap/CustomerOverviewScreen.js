@@ -90,6 +90,11 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
 
   useEffect(() => {
     const loadCustomer = async () => {
+      const state = useSwapStore.getState();
+      const latestProfileEntry = state.currentCustomerData.profile;
+      const latestActivePackageEntry = state.currentCustomerData.activePackage;
+      const latestPickupsEntry = state.currentCustomerData.pickups;
+      const latestPendingReviewEntry = state.currentCustomerData.unreviewedItemsByKey[reviewCacheKey] || null;
       const profilePromise = fetchCustomerProfileIfNeeded(activeEmail);
       const activePackagePromise = fetchCustomerActivePackageIfNeeded(activeEmail);
       const pickupsPromise = fetchCustomerPickupsIfNeeded(activeEmail);
@@ -100,10 +105,10 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
         authToken: activeToken,
       });
       const hasUsableCache =
-        canUseCache(profileEntry) &&
-        canUseCache(activePackageEntry) &&
-        canUseCache(pickupsEntry) &&
-        canUseCache(pendingReviewEntry);
+        canUseCache(latestProfileEntry) &&
+        canUseCache(latestActivePackageEntry) &&
+        canUseCache(latestPickupsEntry) &&
+        canUseCache(latestPendingReviewEntry);
 
       try {
         const request = Promise.all([profilePromise, activePackagePromise, pickupsPromise, unreviewedPromise]);
@@ -113,7 +118,7 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
 
         setPendingReviewCount(getPendingReviewCount(pendingReviewResponse));
       } catch {
-        const pendingData = getPendingReviewItems(pendingReviewEntry?.data);
+        const pendingData = getPendingReviewItems(latestPendingReviewEntry?.data);
         setPendingReviewCount(pendingData.length);
       }
     };
@@ -122,15 +127,12 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   }, [
     activeEmail,
     activeToken,
-    activePackageEntry,
     canUseCache,
     fetchCustomerActivePackageIfNeeded,
     fetchCustomerPickupsIfNeeded,
     fetchCustomerProfileIfNeeded,
     fetchCustomerUnreviewedItemsIfNeeded,
-    pendingReviewEntry,
-    pickupsEntry,
-    profileEntry,
+    reviewCacheKey,
     withLoader,
   ]);
 

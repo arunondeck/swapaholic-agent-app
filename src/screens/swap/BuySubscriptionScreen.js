@@ -40,11 +40,13 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
 
   useEffect(() => {
     const loadData = async () => {
+      const state = useSwapStore.getState();
+      const latestProfileEntry = state.currentCustomerData.profile;
       const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
       const subscriptionsPromise = shopItemsSubscriptions.length
         ? Promise.resolve(shopItemsSubscriptions)
         : fetchShopSubscriptions().then((data) => data.shopItemsSubscriptions);
-      const hasUsableCache = canUseCache(profileEntry) && shopItemsSubscriptions.length > 0;
+      const hasUsableCache = canUseCache(latestProfileEntry) && shopItemsSubscriptions.length > 0;
 
       try {
         setError('');
@@ -60,7 +62,7 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
     };
 
     loadData();
-  }, [canUseCache, customerEmail, fetchCustomerProfileIfNeeded, fetchShopSubscriptions, profileEntry, shopItemsSubscriptions, withLoader]);
+  }, [canUseCache, customerEmail, fetchCustomerProfileIfNeeded, fetchShopSubscriptions, shopItemsSubscriptions, withLoader]);
 
   const itemCount = useMemo(() => parseWholeNumber(itemCountInput), [itemCountInput]);
   const paymentSummary = useMemo(

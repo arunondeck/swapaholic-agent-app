@@ -66,9 +66,10 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
           return;
         }
 
+        const latestProfileEntry = useSwapStore.getState().currentCustomerData.profile;
         const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
         const checkoutCartPromise = getCustomerCheckoutCart(customerEmail);
-        const [profile, checkoutCart] = canUseCache(profileEntry)
+        const [profile, checkoutCart] = canUseCache(latestProfileEntry)
           ? await Promise.all([profilePromise, checkoutCartPromise])
           : await withLoader(Promise.all([profilePromise, checkoutCartPromise]), 'Loading checkout...');
 
@@ -90,7 +91,7 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
     return () => {
       active = false;
     };
-  }, [canUseCache, customerEmail, fetchCustomerProfileIfNeeded, isCustomerMode, profileEntry, withLoader]);
+  }, [canUseCache, customerEmail, fetchCustomerProfileIfNeeded, isCustomerMode, withLoader]);
 
   useEffect(() => {
     fetchShopPointsSubscriptions().catch(() => null);

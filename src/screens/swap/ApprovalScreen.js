@@ -74,13 +74,15 @@ export const ApprovalScreen = ({ pop, customerEmail, showDateEntered = false }) 
 
   useEffect(() => {
     const loadProducts = async () => {
+      const state = useSwapStore.getState();
+      const latestReviewEntry = state.currentCustomerData.unreviewedItemsByKey[cacheKey] || null;
       const request = fetchCustomerUnreviewedItemsIfNeeded({
         maxResults: pageSize,
         offset,
         customerEmail: activeEmail,
         authToken: activeToken,
       });
-      const hasUsableCache = canUseCache(reviewEntry);
+      const hasUsableCache = canUseCache(latestReviewEntry);
 
       try {
         if (hasUsableCache) {
@@ -94,7 +96,7 @@ export const ApprovalScreen = ({ pop, customerEmail, showDateEntered = false }) 
     };
 
     loadProducts();
-  }, [activeEmail, activeToken, cacheKey, canUseCache, fetchCustomerUnreviewedItemsIfNeeded, offset, pageSize, reviewEntry, withLoader]);
+  }, [activeEmail, activeToken, cacheKey, canUseCache, fetchCustomerUnreviewedItemsIfNeeded, offset, pageSize, withLoader]);
 
   /**
    * @param {import('../../types/swapTypes').SwapProduct} product

@@ -33,9 +33,12 @@ export const CustomerOrderDetailScreen = ({ pop, customerEmail, orderId }) => {
 
   useEffect(() => {
     const loadData = async () => {
+      const state = useSwapStore.getState();
+      const latestProfileEntry = state.currentCustomerData.profile;
+      const latestOrderEntry = state.currentCustomerData.orderDetailsById[String(orderId)] || null;
       const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
       const orderPromise = fetchCustomerOrderDetailIfNeeded(customerEmail, orderId);
-      const hasUsableCache = canUseCache(profileEntry) && canUseCache(orderEntry);
+      const hasUsableCache = canUseCache(latestProfileEntry) && canUseCache(latestOrderEntry);
 
       try {
         if (hasUsableCache) {
@@ -49,7 +52,7 @@ export const CustomerOrderDetailScreen = ({ pop, customerEmail, orderId }) => {
     };
 
     loadData();
-  }, [canUseCache, customerEmail, fetchCustomerOrderDetailIfNeeded, fetchCustomerProfileIfNeeded, orderEntry, orderId, profileEntry, withLoader]);
+  }, [canUseCache, customerEmail, fetchCustomerOrderDetailIfNeeded, fetchCustomerProfileIfNeeded, orderId, withLoader]);
 
   if (!customer || !order) {
     return (

@@ -40,13 +40,19 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
 
   useEffect(() => {
     const loadData = async () => {
+      const state = useSwapStore.getState();
+      const latestProfileEntry = state.currentCustomerData.profile;
+      const latestSourceEntry =
+        sourceType === 'subscription'
+          ? state.currentCustomerData.subscriptionDetailsById[String(sourceId)] || null
+          : state.currentCustomerData.pickupDetailsById[String(sourceId)] || null;
       const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
       const sourcePromise =
         sourceType === 'subscription'
           ? fetchCustomerSubscriptionDetailIfNeeded(customerEmail, sourceId)
           : fetchCustomerPickupDetailIfNeeded(customerEmail, sourceId);
       const optionsPromise = getItemEntryOptions();
-      const hasUsableCache = canUseCache(profileEntry) && canUseCache(sourceEntry);
+      const hasUsableCache = canUseCache(latestProfileEntry) && canUseCache(latestSourceEntry);
 
       try {
         setError('');
@@ -75,8 +81,6 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
     fetchCustomerPickupDetailIfNeeded,
     fetchCustomerProfileIfNeeded,
     fetchCustomerSubscriptionDetailIfNeeded,
-    profileEntry,
-    sourceEntry,
     sourceId,
     sourceType,
     withLoader,

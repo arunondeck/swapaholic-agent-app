@@ -21,9 +21,12 @@ export const CustomerSubscriptionDetailScreen = ({ pop, push, customerEmail, sub
 
   useEffect(() => {
     const loadData = async () => {
+      const state = useSwapStore.getState();
+      const latestProfileEntry = state.currentCustomerData.profile;
+      const latestSubscriptionEntry = state.currentCustomerData.subscriptionDetailsById[String(subscriptionId)] || null;
       const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
       const subscriptionPromise = fetchCustomerSubscriptionDetailIfNeeded(customerEmail, subscriptionId);
-      const hasUsableCache = canUseCache(profileEntry) && canUseCache(subscriptionEntry);
+      const hasUsableCache = canUseCache(latestProfileEntry) && canUseCache(latestSubscriptionEntry);
 
       try {
         if (hasUsableCache) {
@@ -37,7 +40,7 @@ export const CustomerSubscriptionDetailScreen = ({ pop, push, customerEmail, sub
     };
 
     loadData();
-  }, [canUseCache, customerEmail, fetchCustomerProfileIfNeeded, fetchCustomerSubscriptionDetailIfNeeded, profileEntry, subscriptionEntry, subscriptionId, withLoader]);
+  }, [canUseCache, customerEmail, fetchCustomerProfileIfNeeded, fetchCustomerSubscriptionDetailIfNeeded, subscriptionId, withLoader]);
 
   if (!customer || !subscription) {
     return (
