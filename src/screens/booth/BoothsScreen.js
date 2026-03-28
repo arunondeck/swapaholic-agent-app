@@ -75,7 +75,7 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
 
   return (
     <ScreenShell title="Booths" subtitle={error || 'Browse and manage booth approvals'} onBack={pop} backgroundColor="#f1f5f9">
-      <View style={styles.tabsRow}>
+      <View style={styles.tabsBar}>
         {statusTabs.map((item) => {
           const active = item === status;
           return (
@@ -85,9 +85,9 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
                 setStatus(item);
                 setPage(1);
               }}
-              style={[styles.tabButton, active && styles.tabButtonActive]}
+              style={[styles.tabsBarButton, active && styles.tabsBarButtonActive]}
             >
-              <Text style={[styles.tabButtonText, active && styles.tabButtonTextActive]}>{item[0].toUpperCase() + item.slice(1)}</Text>
+              <Text style={[styles.tabsBarButtonText, active && styles.tabsBarButtonTextActive]}>{item[0].toUpperCase() + item.slice(1)}</Text>
             </TouchableOpacity>
           );
         })}

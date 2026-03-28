@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getBoothProductsByFilter, updateBoothProduct } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
 import { generateBoothProductLabel, isBoothProductPrinted } from '../../services/boothPrintService';
@@ -73,15 +73,17 @@ export const BoothDetailsScreen = ({ pop, push, boothId }) => {
       onBack={pop}
       backgroundColor="#f1f5f9"
     >
-      <View style={styles.tabsRow}>
-        {productTabs.map((item) => {
-          const active = item === status;
-          return (
-            <TouchableOpacity key={item} onPress={() => setStatus(item)} style={[styles.tabButton, active && styles.tabButtonActive]}>
-              <Text style={[styles.tabButtonText, active && styles.tabButtonTextActive]}>{item[0].toUpperCase() + item.slice(1)}</Text>
-            </TouchableOpacity>
-          );
-        })}
+      <View style={styles.tabsBarAlt}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsBarScrollContent}>
+          {productTabs.map((item) => {
+            const active = item === status;
+            return (
+              <TouchableOpacity key={item} onPress={() => setStatus(item)} style={[styles.tabsBarButton, active && styles.tabsBarButtonActive]}>
+                <Text style={[styles.tabsBarButtonText, active && styles.tabsBarButtonTextActive]}>{item[0].toUpperCase() + item.slice(1)}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       <TextInput
