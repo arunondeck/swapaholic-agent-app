@@ -40,14 +40,24 @@ export const SwapProductCard
   const brand = readName(product?.brand);
   const size = readName(product?.size);
   const price = product?.price || product?.points || (product?.evaluated_points_c ? `${product.evaluated_points_c} pts` : 'NA');
-  const color = product.color?.name
+  const color = readName(product?.color);
+  const hasFallbackCardName = typeof product?.name === 'string' && product?.name.trim();
+  const shouldUseCardName = brand === 'NA' && category === 'NA' && color === 'NA' && hasFallbackCardName;
+  const name = shouldUseCardName ? product.name?.trim() : `${brand} ${color} ${category}`;
+  const status = String(product?.status_c || '').trim().toLowerCase();
+  const showNotApprovedRibbon = Boolean(status && status !== 'approved');
 
   return (
     <View style={styles.itemRow}>
+      {showNotApprovedRibbon ? (
+        <View style={styles.itemRibbon}>
+          <Text style={styles.itemRibbonText}>Not Approved</Text>
+        </View>
+      ) : null}
       <Image source={{ uri: thumbnail }} style={styles.itemImage} />
       <View style={styles.itemDetails}>
         <Text style={styles.itemEyebrow}>{itemId}</Text>
-        <Text style={styles.cardTitle}>{brand} {color} {category}</Text>
+        <Text style={styles.cardTitle}>{name}</Text>
         <Text style={styles.itemMeta}>Size: {size}</Text>
         <Text style={styles.itemPrice}>{price}</Text>
         {footer}

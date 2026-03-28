@@ -9,7 +9,7 @@ import { styles } from '../../styles/commonStyles';
 export const CustomerPortalScreen = ({ push, pop }) => {
   const activeCustomer = useSwapStore((state) => state.activeCustomer);
   const setActiveCustomerSession = useSwapStore((state) => state.setActiveCustomerSession);
-  const [email, setEmail] = useState(activeCustomer?.email || 'callistmom@yahoo.com.sg');
+  const [email, setEmail] = useState(activeCustomer?.email || 'watleyying@gmail.com');
   const [error, setError] = useState('');
   const { withLoader } = useLoader();
   const isEnabled = email.trim().length > 0;
@@ -19,11 +19,13 @@ export const CustomerPortalScreen = ({ push, pop }) => {
       return;
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     try {
       setError('');
-      const session = await withLoader(authenticateCustomer(email), 'Logging in customer...');
+      const session = await withLoader(authenticateCustomer(normalizedEmail, { forceRefresh: true }), 'Logging in customer...');
       setActiveCustomerSession(session);
-      push('customerOverview', { email });
+      push('customerOverview', { email: normalizedEmail });
     } catch (loginError) {
       setError(loginError.message || 'Customer login failed');
     }

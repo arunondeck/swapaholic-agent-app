@@ -361,10 +361,16 @@ export const styles = StyleSheet.create({
   overviewTableLinkValue: {
     textDecorationLine: 'underline',
   },
+  overviewTableValueExpired: {
+    color: '#6b7280',
+  },
   overviewTableHint: {
     fontSize: 12,
     lineHeight: 16,
     color: '#476543',
+  },
+  overviewTableHintExpired: {
+    color: '#6b7280',
   },
   overviewActionGrid: {
     flexDirection: 'row',
@@ -493,6 +499,24 @@ export const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 8,
     flexDirection: 'row',
+    position: 'relative',
+  },
+  itemRibbon: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 1,
+    backgroundColor: '#b91c1c',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  itemRibbonText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   itemImage: {
     width: 75,

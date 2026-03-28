@@ -397,10 +397,17 @@ const mapApiPickupToPickup = (pickup) => ({
 
 const mapApiPickupDetailToPickup = (pickup) => {
   const customer = Array.isArray(pickup?.customer) ? pickup.customer[0] || null : pickup?.customer || null;
-  const subscribeList = Array.isArray(pickup?.subscribe) ? pickup.subscribe : EMPTY_ARRAY;
+  const subscribeList = Array.isArray(pickup?.subscribe)
+    ? pickup.subscribe
+    : pickup?.subscribe
+      ? [pickup.subscribe]
+      : EMPTY_ARRAY;
+  const subscribe = subscribeList[0] || null;
   const items = (pickup?.customer_items || EMPTY_ARRAY).map((item) => mapApiPickupCustomerItemToProduct(item, pickup, customer));
-  const totalItems = toNumber(pickup?.number_of_items_c);
+  const totalItems = toNumber(subscribe?.number_of_items_c, toNumber(pickup?.number_of_items_c));
   const itemsAdded = toNumber(pickup?.items_added, items.length);
+  const acceptedItems = toNumber(subscribe?.number_of_accepted_items_c);
+  const rejectedItems = toNumber(subscribe?.number_of_rejected_items_c);
   const addressParts = [
     pickup?.street_address_c,
     pickup?.apt_no_c,
@@ -424,7 +431,7 @@ const mapApiPickupDetailToPickup = (pickup) => {
     date: pickup?.trip_date_c || pickup?.date_entered || 'NA',
     address: addressParts || pickup?.street_address_c || 'NA',
     totalItems,
-    remainingItems: Math.max(0, toNumber(pickup?.remaining_items_c, totalItems - itemsAdded)),
+    remainingItems: Math.max(0, totalItems - (acceptedItems + rejectedItems || itemsAdded)),
     items,
   };
 };
@@ -1064,7 +1071,7 @@ const createCustomerSession = async (email) => {
   }
 };
 
-export const authenticateCustomer = async (email) => {
+export const authenticateCustomer = async (email, { forceRefresh = false } = {}) => {
   if (SWAP_USE_MOCK) {
     await delay();
     return {
@@ -1073,6 +1080,10 @@ export const authenticateCustomer = async (email) => {
       profile: getMockCustomerProfile(email),
       walletResponse: await getWalletBalances('', email),
     };
+  }
+
+  if (forceRefresh) {
+    customerSessionCache.delete(String(email || '').trim().toLowerCase());
   }
 
   return createCustomerSession(email);
@@ -1213,6 +1224,7 @@ export const getCustomerOrders = async (email) => {
 
   const session = await createCustomerSession(email);
   const customerId = session?.loginResponse?.customer?.id;
+  const customerToken = session?.loginResponse?.token || '';
   const authToken = session?.loginResponse?.token || '';
 
   if (!customerId) {
@@ -1498,12 +1510,13 @@ export const getCustomerSubscriptions = async (email) => {
   const session = await createCustomerSession(email);
   const loginResponse = session?.loginResponse;
   const customerId = loginResponse?.customer?.id;
+  const customerToken = loginResponse?.token || '';
 
   if (!customerId) {
     return EMPTY_ARRAY;
   }
 
-  const response = await getCustomerSubscribesList({ customerId });
+  const response = await getCustomerSubscribesList({ customerId, authToken: customerToken });
   return (getResponseData(response).subscribes || []).map(mapApiSubscribeToSubscription);
 };
 
@@ -1526,6 +1539,7 @@ export const getActiveCustomerSubscriptions = async (email) => {
     customerId,
     subscribeType: 'shop',
     ignoreNonPickupSubscribe: true,
+    authToken: customerToken,
   });
 
   return (getResponseData(response).subscribes || [])
@@ -1680,6 +1694,74 @@ export const getCustomerPickupDetails = async (email, pickupId) => {
 };
 
 /**
+ * Get the latest pickup linked to a subscription.
+ * Stub for a dedicated backend API when available.
+ * @param {string} email
+ * @param {string} subscriptionId
+ * @returns {Promise<import('../types/swapTypes').SwapPickup | null>}
+ */
+export const getLatestPickupForSubscription = async (email, subscriptionId) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const pickups = getMockCustomerProfile(email).pickups || customerPickups;
+    return pickups.find((pickup) => String(pickup?.subscriptionId || '') === String(subscriptionId || '')) || null;
+  }
+
+  const session = await createCustomerSession(email);
+  const customerToken = session?.loginResponse?.token || '';
+
+  if (!subscriptionId || !customerToken) {
+    return null;
+  }
+
+  const response = await postJson(
+    'pickups/list/by-subscribe',
+    {
+      subscribe_id_c: subscriptionId,
+    },
+    true,
+    {},
+    customerToken,
+    'getLatestPickupForSubscription'
+  );
+
+  console.log('[swapApi] getLatestPickupForSubscription response', {
+    subscriptionId,
+    status: response?.status,
+    status_code: response?.status_code,
+    success: response?.success || null,
+    error: response?.error || null,
+  });
+
+  const pickups = getResponseData(response).pickups || EMPTY_ARRAY;
+
+  if (!Array.isArray(pickups) || pickups.length === 0) {
+    console.log('[swapApi] getLatestPickupForSubscription resolvedPickup', {
+      subscriptionId,
+      pickupCount: Array.isArray(pickups) ? pickups.length : 0,
+      pickup: null,
+    });
+    return null;
+  }
+
+  const [latestPickup] = [...pickups].sort((left, right) => {
+    const leftTime = new Date(left?.date_modified || left?.date_entered || 0).getTime();
+    const rightTime = new Date(right?.date_modified || right?.date_entered || 0).getTime();
+    return rightTime - leftTime;
+  });
+
+  const resolvedPickup = latestPickup ? mapApiPickupDetailToPickup(latestPickup) : null;
+
+  console.log('[swapApi] getLatestPickupForSubscription resolvedPickup', {
+    subscriptionId,
+    pickupCount: pickups.length,
+    pickup: resolvedPickup,
+  });
+
+  return resolvedPickup;
+};
+
+/**
  * Review product with approve/reject action.
  * @param {{ productId: string, action: 'approve' | 'reject', notes?: string, reviewedBy?: string }} params
  * @returns {Promise<import('../types/swapTypes').SwapReviewResponse>}
@@ -1724,7 +1806,8 @@ export const getSubscriptionsList = async (tenancy = 'SWAP.SUB.TYPE.ITEMS.STORE'
     return toMockSubscriptionListResponse(tenancy);
   }
 
-  return postJson('subscriptions/list', { tenancy }, true, {}, authToken, 'getSubscriptionsList');
+  const resolvedAuthToken = authToken || (await loginAsShopUser())?.token || '';
+  return postJson('subscriptions/list', { tenancy }, true, {}, resolvedAuthToken, 'getSubscriptionsList');
 };
 
 export const getAllSubscriptions = async () => {
@@ -1856,6 +1939,7 @@ export const getCustomerSubscribesList = async ({
   customerId,
   subscribeType = 'shop',
   ignoreNonPickupSubscribe = false,
+  authToken = '',
 }) => {
   if (SWAP_USE_MOCK) {
     await delay();
@@ -1878,7 +1962,7 @@ export const getCustomerSubscribesList = async ({
     customer_id_c: customerId,
     subscribe_type_c: subscribeType,
     ignore_non_pickup_subscribe: ignoreNonPickupSubscribe,
-  }, true, {}, '', 'getCustomerSubscribesList');
+  }, true, {}, authToken, 'getCustomerSubscribesList');
 };
 
 /**

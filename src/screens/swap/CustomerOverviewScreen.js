@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+import { getLatestPickupForSubscription } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
 import { buildCustomerUnreviewedItemsCacheKey, useSwapStore } from '../../store/swapStore';
@@ -61,6 +62,15 @@ const getActivePackageDisplayName = (shopSubscribe, fallbackName = '') => {
   return subscriptionName;
 };
 
+const findLatestPickupForSubscription = (pickups, subscriptionId) => {
+  const normalizedSubscriptionId = String(subscriptionId || '').trim();
+  if (!normalizedSubscriptionId || !Array.isArray(pickups)) {
+    return null;
+  }
+
+  return pickups.find((pickup) => String(pickup?.subscriptionId || '').trim() === normalizedSubscriptionId) || null;
+};
+
 export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   const activeCustomer = useSwapStore((state) => state.activeCustomer);
   const fetchShopSubscriptions = useSwapStore((state) => state.fetchShopSubscriptions);
@@ -73,6 +83,7 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   const fetchCustomerActivePackageIfNeeded = useSwapStore((state) => state.fetchCustomerActivePackageIfNeeded);
   const fetchCustomerPickupsIfNeeded = useSwapStore((state) => state.fetchCustomerPickupsIfNeeded);
   const fetchCustomerUnreviewedItemsIfNeeded = useSwapStore((state) => state.fetchCustomerUnreviewedItemsIfNeeded);
+  const primeCustomerPickupDetail = useSwapStore((state) => state.primeCustomerPickupDetail);
   const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
   const activeEmail = customerEmail || activeCustomer?.email || '';
   const activeToken = activeCustomer?.token || activeCustomer?.loginResponse?.token || '';
@@ -132,6 +143,7 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
     fetchCustomerPickupsIfNeeded,
     fetchCustomerProfileIfNeeded,
     fetchCustomerUnreviewedItemsIfNeeded,
+    primeCustomerPickupDetail,
     reviewCacheKey,
     withLoader,
   ]);
@@ -165,14 +177,16 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   today.setHours(0, 0, 0, 0);
   const isShopSubscribeExpired = shopSubscribeExpiry ? shopSubscribeExpiry < today : false;
   const hasActiveShopSubscribe = Boolean(shopSubscribe && !isShopSubscribeExpired);
+  const latestSubscriptionId = shopSubscribe?.id || activeSubscription?.id || '';
+  const linkedPickup = findLatestPickupForSubscription(pickups, latestSubscriptionId);
   const displayedPackageName = getActivePackageDisplayName(shopSubscribe, customer.activePackage || activeSubscription?.plan || '');
   const displayedPackageSubtitle = isShopSubscribeExpired
-    ? 'Package expired'
+    ? 'Expired'
     : hasActiveShopSubscribe && activeSubscription
       ? `${activeSubscription.status} | Renews ${activeSubscription.renewalDate || 'NA'}`
       : '';
   const canAddToSubscription = hasActiveShopSubscribe && Number.parseInt(String(activeSubscription?.itemsRemaining || 0), 10) > 0;
-  const canOpenActiveSubscription = hasActiveShopSubscribe && Boolean(activeSubscription);
+  const canOpenLatestPackage = Boolean(displayedPackageName && latestSubscriptionId);
 
   return (
     <ScreenShell title={customer.name} subtitle={customer.email} onBack={pop} backgroundColor="#e7f7ef">
@@ -189,24 +203,56 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
         </View>
 
         <TouchableOpacity
-          activeOpacity={canOpenActiveSubscription ? 0.8 : 1}
+          activeOpacity={canOpenLatestPackage ? 0.8 : 1}
           onPress={
-            canOpenActiveSubscription
-              ? () =>
-                  push('customerSubscriptionDetail', {
-                    email: customer.email,
-                    subscriptionId: activeSubscription.id,
-                  })
+            canOpenLatestPackage
+              ? async () => {
+                  if (linkedPickup?.id) {
+                    push('customerPickupDetail', {
+                      email: customer.email,
+                      pickupId: linkedPickup.id,
+                    });
+                    return;
+                  }
+
+                  const pickupFromApi = await getLatestPickupForSubscription(customer.email, latestSubscriptionId).catch(() => null);
+
+                  if (pickupFromApi?.id) {
+                    primeCustomerPickupDetail(pickupFromApi.id, pickupFromApi);
+                    push('customerPickupDetail', {
+                      email: customer.email,
+                      pickupId: pickupFromApi.id,
+                    });
+                    return;
+                  }
+
+                  if (activeSubscription?.id) {
+                    push('customerSubscriptionDetail', {
+                      email: customer.email,
+                      subscriptionId: activeSubscription.id,
+                    });
+                  }
+                }
               : undefined
           }
           style={[styles.overviewTableRow, styles.overviewTableRowBorder]}
         >
           <View style={styles.overviewTableCell}>
             <Text style={styles.overviewTableLabel}>Latest Package</Text>
-            <Text style={[styles.overviewTableValue, canOpenActiveSubscription ? styles.overviewTableLinkValue : null]}>
+            <Text
+              style={[
+                styles.overviewTableValue,
+                isShopSubscribeExpired ? styles.overviewTableValueExpired : null,
+                canOpenLatestPackage ? styles.overviewTableLinkValue : null,
+              ]}
+            >
               {displayedPackageName}
             </Text>
-            {displayedPackageSubtitle ? <Text style={styles.overviewTableHint}>{displayedPackageSubtitle}</Text> : null}
+            {displayedPackageSubtitle ? (
+              <Text style={[styles.overviewTableHint, isShopSubscribeExpired ? styles.overviewTableHintExpired : null]}>
+                {displayedPackageSubtitle}
+              </Text>
+            ) : null}
           </View>
         </TouchableOpacity>
 

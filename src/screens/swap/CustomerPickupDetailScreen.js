@@ -1,22 +1,18 @@
 import React, { useEffect } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
-import { ProductCard } from '../../components/ProductCard';
+import { SwapProductCard } from '../../components/SwapProductCard';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
 import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 
-const formatDateTime = (dateValue, timeValue = '') => {
-  const date = String(dateValue || '').trim();
-  const time = String(timeValue || '').trim();
-
-  if (date && time) {
-    return `${date} | ${time}`;
-  }
-
-  return date || time || 'NA';
+const toNumber = (value, fallback = 0) => {
+  const parsed = Number.parseInt(String(value ?? fallback), 10);
+  return Number.isNaN(parsed) ? fallback : parsed;
 };
+
+const formatDateOnly = (value) => String(value || '').trim() || 'NA';
 
 export const CustomerPickupDetailScreen = ({ pop, push, customerEmail, pickupId }) => {
   const { withLoader } = useLoader();
@@ -64,30 +60,34 @@ export const CustomerPickupDetailScreen = ({ pop, push, customerEmail, pickupId 
   const subscribe = Array.isArray(pickup.subscribe) ? pickup.subscribe[0] || null : null;
   const subscribeUniqueId = subscribe?.unique_id_c || subscribe?.id || pickup.subscriptionId || 'NA';
   const subscribeName = subscribe?.name || 'NA';
-  const tripDateTime = formatDateTime(pickup.trip_date_c || pickup.date, pickup.trip_time_c);
-  const enteredDateTime = formatDateTime(pickup.date_entered, '');
+  const totalItems = toNumber(subscribe?.number_of_items_c, pickup.totalItems || 0);
+  const acceptedItems = toNumber(subscribe?.number_of_accepted_items_c);
+  const rejectedItems = toNumber(subscribe?.number_of_rejected_items_c);
+  const remainingItems = Math.max(0, totalItems - (acceptedItems + rejectedItems));
+  const tripDate = formatDateOnly(pickup.trip_date_c || pickup.date);
+  const enteredDate = formatDateOnly(pickup.date_entered);
 
   return (
-    <ScreenShell title={pickupUniqueId} subtitle={`${customer.name} pickup details`} onBack={pop} backgroundColor="#ffe4e1">
+    <ScreenShell title={subscribeName} subtitle="Pickup details for subscribe" onBack={pop} backgroundColor="#ffe4e1">
       <View style={styles.listItem}>
         <Text style={styles.sectionTitle}>Pickup Summary</Text>
         <Row label="Pickup ID" value={pickupUniqueId} />
-        <Row label="Subscribe ID" value={subscribeUniqueId} />
-        <Row label="Trip Date & Time" value={tripDateTime} />
-        <Row label="Entered Date & Time" value={enteredDateTime} />
+        <Row label="Trip Date" value={tripDate} />
         <Row label="Subscribe Name" value={subscribeName} />
+        <Row label="Number Of Items" value={String(totalItems)} />
+        <Row label="Items Remaining" value={String(remainingItems)} />
       </View>
 
       <Text style={styles.sectionTitle}>Items Swapped In</Text>
       {(pickup.items || []).map((item) => (
-        <ProductCard
+        <SwapProductCard
           key={item.id}
           product={item}
           subtitle={`Item ID: ${item.unique_item_id_c || item.id} | ${item.category?.name || 'NA'} | ${item.style?.name || 'NA'}`}
         />
       ))}
 
-      {pickup.remainingItems > 0 ? (
+      {remainingItems > 0 ? (
         <TouchableOpacity
           onPress={() =>
             push('customerItemEntry', {

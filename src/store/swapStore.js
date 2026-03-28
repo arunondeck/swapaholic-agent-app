@@ -156,6 +156,22 @@ export const useSwapStore = create((set, get) => ({
       };
     });
   },
+  primeCustomerPickupDetail: (pickupId, pickup) => {
+    const key = String(pickupId || pickup?.id || '');
+    if (!key || !pickup) {
+      return;
+    }
+
+    set((state) => ({
+      currentCustomerData: {
+        ...state.currentCustomerData,
+        pickupDetailsById: {
+          ...state.currentCustomerData.pickupDetailsById,
+          [key]: toLoadedEntry(pickup),
+        },
+      },
+    }));
+  },
   fetchCustomerProfileIfNeeded: async (email, { force = false } = {}) => {
     const normalizedEmail = normalizeEmail(email || get().activeCustomer?.email || '');
     const currentEntry = get().currentCustomerData.profile;
