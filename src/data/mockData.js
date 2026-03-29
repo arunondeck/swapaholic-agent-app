@@ -462,6 +462,101 @@ export const categoryOptions = {
 
 export const colorOptions = ['Black', 'White', 'Blue', 'Green', 'Pink', 'Beige'];
 export const conditionOptions = ['New', 'Gently Used', 'Slight Damage'];
+export const mockBrands = [
+  {
+    id: 'af6f8417-7a35-a0db-6b70-5a0d7cfed187',
+    name: 'Unbranded',
+    brand_segments: {
+      id: 'segment-all',
+    },
+  },
+  {
+    id: 'brand-zara',
+    name: 'Zara',
+    brand_segments: {
+      id: 'segment-women',
+    },
+  },
+  {
+    id: 'brand-hm',
+    name: 'H&M',
+    brand_segments: {
+      id: 'segment-women',
+    },
+  },
+  {
+    id: 'brand-mango',
+    name: 'Mango',
+    brand_segments: {
+      id: 'segment-women',
+    },
+  },
+];
+export const mockCategories = Object.keys(categoryOptions).map((name, index) => ({
+  id: `mock-category-${index + 1}`,
+  name,
+}));
+export const mockUserSegments = [
+  {
+    id: 'segment-boys',
+    name: 'BOYS',
+    code_c: 'B',
+  },
+  {
+    id: 'segment-girls',
+    name: 'GIRLS',
+    code_c: 'G',
+  },
+  {
+    id: 'segment-men',
+    name: 'MEN',
+    code_c: 'M',
+  },
+  {
+    id: 'segment-women',
+    name: 'WOMEN',
+    code_c: 'W',
+  },
+];
+export const mockStyles = [
+  { id: 'style-tshirt', name: 'T-Shirt', status_c: 'active' },
+  { id: 'style-shirt', name: 'Shirt', status_c: 'active' },
+  { id: 'style-blouse', name: 'Blouse', status_c: 'active' },
+  { id: 'style-tank', name: 'Tank', status_c: 'active' },
+  { id: 'style-mini-dress', name: 'Mini Dress', status_c: 'active' },
+  { id: 'style-midi-dress', name: 'Midi Dress', status_c: 'active' },
+  { id: 'style-maxi-dress', name: 'Maxi Dress', status_c: 'active' },
+  { id: 'style-denim-shorts', name: 'Denim Shorts', status_c: 'active' },
+  { id: 'style-tailored-shorts', name: 'Tailored Shorts', status_c: 'active' },
+  { id: 'style-casual-shorts', name: 'Casual Shorts', status_c: 'active' },
+  { id: 'style-mini-skirt', name: 'Mini Skirt', status_c: 'active' },
+  { id: 'style-midi-skirt', name: 'Midi Skirt', status_c: 'active' },
+  { id: 'style-pleated-skirt', name: 'Pleated Skirt', status_c: 'active' },
+];
+export const mockColors = colorOptions.map((name, index) => ({
+  id: `mock-color-${index + 1}`,
+  name,
+  code_c: name.slice(0, 2).toUpperCase(),
+  hex_code_c: '',
+}));
+export const mockMaterials = [
+  { id: 'material-cotton', name: 'Cotton', commonly_used_c: 'yes' },
+  { id: 'material-rayon', name: 'Rayon', commonly_used_c: 'yes' },
+  { id: 'material-polyester', name: 'Polyester', commonly_used_c: 'yes' },
+  { id: 'material-denim', name: 'Denim', commonly_used_c: 'yes' },
+];
+export const mockMadeIns = [
+  { id: 'made-in-sg', name: 'Singapore', commonly_used_c: 'yes' },
+  { id: 'made-in-cn', name: 'China', commonly_used_c: 'yes' },
+  { id: 'made-in-id', name: 'Indonesia', commonly_used_c: 'yes' },
+  { id: 'made-in-vn', name: 'Vietnam', commonly_used_c: 'yes' },
+];
+export const mockOccasions = [
+  { id: 'occasion-casual', name: 'Casual' },
+  { id: 'occasion-work', name: 'Work' },
+  { id: 'occasion-party', name: 'Party' },
+  { id: 'occasion-vacation', name: 'Vacation' },
+];
 
 const pickupOneItems = [
   createSwapMockProduct({

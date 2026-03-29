@@ -37,6 +37,7 @@ import { SwapModeScreen } from './src/screens/swap/SwapModeScreen';
 import { SwapPlansScreen } from './src/screens/swap/SwapPlansScreen';
 import { SwapTagsScreen } from './src/screens/swap/SwapTagsScreen';
 import { useAppSessionStore } from './src/store/appSessionStore';
+import { useSwapStore } from './src/store/swapStore';
 import { styles } from './src/styles/commonStyles';
 
 const SPLASH_MIN_DURATION_MS = 2000;
@@ -50,6 +51,7 @@ export default function App() {
   const hydrateAppSession = useAppSessionStore((state) => state.hydrate);
   const hydrated = useAppSessionStore((state) => state.hydrated);
   const checkingSession = useAppSessionStore((state) => state.checkingSession);
+  const fetchReferenceDataIfNeeded = useSwapStore((state) => state.fetchReferenceDataIfNeeded);
 
   const current = stack[stack.length - 1];
   const push = (route, params = {}) => setStack((prev) => [...prev, { route, params }]);
@@ -70,6 +72,18 @@ export default function App() {
 
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!hydrated || checkingSession) {
+      return;
+    }
+
+    fetchReferenceDataIfNeeded().catch((error) => {
+      console.log('[swapStore] reference data preload failed', {
+        reason: error?.message || 'unknown error',
+      });
+    });
+  }, [checkingSession, fetchReferenceDataIfNeeded, hydrated]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {

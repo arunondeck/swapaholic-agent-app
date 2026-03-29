@@ -317,6 +317,14 @@
  */
 
 /**
+ * @typedef {{ id: string, item: Record<string, unknown> }} SwapUpdateCustomerItemRequest
+ */
+
+/**
+ * @typedef {{ pickupId: string, thumbnailFile: Blob | { uri: string, name?: string, type?: string }, item: Record<string, unknown> }} SwapCreateCustomerPickupItemRequest
+ */
+
+/**
  * @typedef {{ id?: string, sku: string, name: string, size: string, points: string }} SwapCheckoutCartItem
  */
 

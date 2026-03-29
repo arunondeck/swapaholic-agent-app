@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import {
   getActivePackageDetails,
   getAllSubscriptions,
+  getBrands,
+  getCategories,
+  getColors,
   getCustomerOrderDetails,
   getCustomerOrders,
   getCustomerPickupDetails,
@@ -11,11 +14,19 @@ import {
   getCustomerSubscriptions,
   getCustomerSwappedInItems,
   getCustomerUnreviewedItems,
+  getMadeIns,
+  getMaterials,
+  getOccasions,
   getShopItemSubscriptions,
   getShopPointsSubscriptions,
+  getStyles,
+  getUserSegments,
 } from '../api/swapOpsApi';
+import { categoryOptions, colorOptions, conditionOptions } from '../data/mockData';
 
 const CUSTOMER_CACHE_TTL_MS = 30 * 60 * 1000;
+const REFERENCE_DATA_TTL_MS = 12 * 60 * 60 * 1000;
+let referenceDataRequest = null;
 
 const normalizeEmail = (value = '') => String(value || '').trim().toLowerCase();
 
@@ -41,6 +52,56 @@ const createCustomerDataCache = () => ({
   orderDetailsById: {},
   unreviewedItemsByKey: {},
 });
+
+const createReferenceDataCache = () => ({
+  brands: createCacheEntry([]),
+  categories: createCacheEntry([]),
+  userSegments: createCacheEntry([]),
+  styles: createCacheEntry([]),
+  colors: createCacheEntry([]),
+  materials: createCacheEntry([]),
+  madeIns: createCacheEntry([]),
+  occasions: createCacheEntry([]),
+});
+
+const REFERENCE_DATA_KEYS = ['brands', 'categories', 'userSegments', 'styles', 'colors', 'materials', 'madeIns', 'occasions'];
+
+const createItemEntryOptions = ({
+  categories = [],
+  brands = [],
+  userSegments = [],
+  styles = [],
+  colors = [],
+  materials = [],
+  madeIns = [],
+  occasions = [],
+} = {}) => {
+  const categoryNames = Array.isArray(categories)
+    ? categories
+        .map((category) => String(category?.name || '').trim())
+        .filter(Boolean)
+    : [];
+  const resolvedCategoryNames = categoryNames.length > 0 ? categoryNames : Object.keys(categoryOptions);
+  const resolvedCategoryOptions = Object.fromEntries(
+    resolvedCategoryNames.map((name) => [name, categoryOptions[name] || [name]])
+  );
+
+  return {
+    categoryOptions: resolvedCategoryOptions,
+    colorOptions:
+      Array.isArray(colors) && colors.length > 0
+        ? colors.map((color) => color?.name).filter(Boolean)
+        : colorOptions,
+    conditionOptions,
+    brandOptions: Array.isArray(brands) ? brands : [],
+    userSegmentOptions: Array.isArray(userSegments) ? userSegments : [],
+    styleOptions: Array.isArray(styles) ? styles : [],
+    colorEntities: Array.isArray(colors) ? colors : [],
+    materialOptions: Array.isArray(materials) ? materials : [],
+    madeInOptions: Array.isArray(madeIns) ? madeIns : [],
+    occasionOptions: Array.isArray(occasions) ? occasions : [],
+  };
+};
 
 const getCustomerOwnerKey = ({ email = '', customerId = '' } = {}) => String(customerId || normalizeEmail(email) || '');
 
@@ -88,12 +149,108 @@ export const useSwapStore = create((set, get) => ({
   activeCustomer: null,
   currentCustomerOwnerKey: '',
   currentCustomerData: createCustomerDataCache(),
+  referenceData: createReferenceDataCache(),
+  referenceDataTtlMs: REFERENCE_DATA_TTL_MS,
   customerCacheTtlMs: CUSTOMER_CACHE_TTL_MS,
   isCustomerCacheUsable,
+  getItemEntryOptions: () => {
+    const state = get();
+    return createItemEntryOptions({
+      brands: state.referenceData.brands.data,
+      categories: state.referenceData.categories.data,
+      userSegments: state.referenceData.userSegments.data,
+      styles: state.referenceData.styles.data,
+      colors: state.referenceData.colors.data,
+      materials: state.referenceData.materials.data,
+      madeIns: state.referenceData.madeIns.data,
+      occasions: state.referenceData.occasions.data,
+    });
+  },
   clearCurrentCustomerData: () =>
     set({
       currentCustomerData: createCustomerDataCache(),
     }),
+  fetchReferenceDataIfNeeded: async ({ force = false } = {}) => {
+    const state = get();
+    const { referenceData, referenceDataTtlMs } = state;
+    const hasUsableReferenceData = REFERENCE_DATA_KEYS.every((key) =>
+      isCustomerCacheUsable(referenceData[key], referenceDataTtlMs)
+    );
+
+    if (!force && hasUsableReferenceData) {
+      return Object.fromEntries(REFERENCE_DATA_KEYS.map((key) => [key, referenceData[key].data || []]));
+    }
+
+    if (!force && REFERENCE_DATA_KEYS.some((key) => referenceData[key].loading)) {
+      if (referenceDataRequest) {
+        return referenceDataRequest;
+      }
+
+      return Object.fromEntries(REFERENCE_DATA_KEYS.map((key) => [key, referenceData[key].data || []]));
+    }
+
+    set((currentState) => ({
+      referenceData: Object.fromEntries(
+        REFERENCE_DATA_KEYS.map((key) => [
+          key,
+          {
+            ...currentState.referenceData[key],
+            loading: true,
+            error: '',
+          },
+        ])
+      ),
+    }));
+
+    referenceDataRequest = Promise.all([
+      getBrands(),
+      getCategories(),
+      getUserSegments(),
+      getStyles(),
+      getColors(),
+      getMaterials(),
+      getMadeIns(),
+      getOccasions(),
+    ])
+      .then(([brands, categories, userSegments, styles, colors, materials, madeIns, occasions]) => {
+        const nextReferenceData = {
+          brands: toLoadedEntry(brands || []),
+          categories: toLoadedEntry(categories || []),
+          userSegments: toLoadedEntry(userSegments || []),
+          styles: toLoadedEntry(styles || []),
+          colors: toLoadedEntry(colors || []),
+          materials: toLoadedEntry(materials || []),
+          madeIns: toLoadedEntry(madeIns || []),
+          occasions: toLoadedEntry(occasions || []),
+        };
+
+        set({
+          referenceData: nextReferenceData,
+        });
+
+        return Object.fromEntries(REFERENCE_DATA_KEYS.map((key) => [key, nextReferenceData[key].data || []]));
+      })
+      .catch((error) => {
+        set((currentState) => ({
+          referenceData: Object.fromEntries(
+            REFERENCE_DATA_KEYS.map((key) => [
+              key,
+              {
+                ...currentState.referenceData[key],
+                loading: false,
+                error: error?.message || `Failed to load ${key}.`,
+              },
+            ])
+          ),
+        }));
+        throw error;
+      })
+      .finally(() => {
+        referenceDataRequest = null;
+      });
+
+    return referenceDataRequest;
+  },
   invalidateCustomerCache: (keysOrRules = []) =>
     set((state) => {
       const keys = Array.isArray(keysOrRules) ? keysOrRules : [keysOrRules];

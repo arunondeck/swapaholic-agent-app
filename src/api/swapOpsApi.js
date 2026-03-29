@@ -16,9 +16,17 @@ import {
   getCustomerProfile as getMockCustomerProfile,
   getCustomerSubscription as getMockCustomerSubscription,
   getPickupStatus as getMockPickupStatus,
+  mockBrands,
   mockBoothProducts,
+  mockColors,
   mockProductReviews,
+  mockCategories,
+  mockMadeIns,
+  mockMaterials,
+  mockOccasions,
   mockSwapProducts,
+  mockStyles,
+  mockUserSegments,
   plans,
   swapSubscriptionCatalog,
 } from '../data/mockData';
@@ -83,6 +91,41 @@ let customerOrdersStore = customerOrders.map((order) => ({
 const getResponseData = (response) => response?.success?.data || {};
 
 const getResponseError = (response) => response?.error || null;
+
+const getResponseDataList = (response, key) => {
+  const data = getResponseData(response);
+  return Array.isArray(data?.[key]) ? data[key] : EMPTY_ARRAY;
+};
+
+const getResponsePrimaryRecord = (response) => {
+  const data = getResponseData(response);
+
+  if (data && typeof data === 'object') {
+    if (data.item && typeof data.item === 'object') {
+      return data.item;
+    }
+
+    if (data.customer_item && typeof data.customer_item === 'object') {
+      return data.customer_item;
+    }
+
+    return data;
+  }
+
+  if (response?.item && typeof response.item === 'object') {
+    return response.item;
+  }
+
+  return null;
+};
+
+const DEFAULT_TAXONOMY_LIST_PARAMS = {
+  max_results: 250,
+  offset: 0,
+  order_by: 'name ASC',
+};
+
+const resolveGuestAuthToken = async () => getCachedStoredAppSession()?.guestToken || (await getStoredGuestToken());
 
 const getCustomerItemsListData = (response) => {
   if (response?.success?.data && typeof response.success.data === 'object') {
@@ -1670,6 +1713,77 @@ export const getAllCustomerPickups = async (email) => {
   return (Array.isArray(rawPickups) ? rawPickups : EMPTY_ARRAY).map(mapApiPickupDetailToPickup);
 };
 
+const postPublicJson = async (path, body, withVersion = true, extraHeaders = {}, callerName = 'unknown') => {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...extraHeaders,
+  };
+  const url = buildUrl(path, withVersion);
+  logApiRequest({
+    callerName,
+    method: 'POST',
+    url,
+    payload: body,
+    headers,
+  });
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  const json = await response.json().catch(() => null);
+  const payload = json ?? {
+    status: response.ok,
+    error: {
+      code: `HTTP-${response.status}`,
+      message: 'Invalid JSON response from server.',
+    },
+    status_code: response.status,
+  };
+
+  logApiResponse({
+    callerName,
+    method: 'POST',
+    url,
+    response: payload,
+  });
+
+  if (!response.ok || payload?.status === false || getResponseError(payload)) {
+    const errorPayload = getResponseError(payload);
+    const message = errorPayload?.message || payload?.message || `Request failed with status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return payload;
+};
+
+const getAuthenticatedTaxonomyList = async ({
+  path,
+  responseKey,
+  body = DEFAULT_TAXONOMY_LIST_PARAMS,
+  mockData = EMPTY_ARRAY,
+  callerName = 'unknown',
+} = {}) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return mockData;
+  }
+
+  const guestToken = await resolveGuestAuthToken();
+  const response = await postJson(
+    path,
+    body,
+    true,
+    {},
+    guestToken,
+    callerName
+  );
+
+  return getResponseDataList(response, responseKey);
+};
+
 /**
  * Get details of customer subscription.
  * @param {string} email
@@ -2225,15 +2339,19 @@ export const reviewCustomerItem = async ({ id, status_c, customerEmail = '', aut
 export const addItemToCustomerPickup = async ({ pickupId, thumbnailFile }) => {
   if (SWAP_USE_MOCK) {
     await delay();
+    const item = {
+      id: `ITEM-${Date.now()}`,
+      pickup_id_c: pickupId,
+      sub_status_c: 'out_inventory',
+      thumbnail_c: thumbnailFile?.uri || '',
+    };
+
     return {
       status: true,
       success: {
         code: 'ITEM-201',
         message: 'Customer item created',
-        data: {
-          id: `ITEM-${Date.now()}`,
-          pickup_id_c: pickupId,
-        },
+        data: item,
       },
       error: null,
       status_code: 200,
@@ -2245,6 +2363,70 @@ export const addItemToCustomerPickup = async ({ pickupId, thumbnailFile }) => {
   formData.append('thumbnail_c', thumbnailFile);
 
   return postFormData('users/customer-items/init', formData, false, '', 'addItemToCustomerPickup');
+};
+
+export const updateCustomerPickupItem = async ({ id, item = {} } = {}) => {
+  if (!id) {
+    throw new Error('Customer item id is required.');
+  }
+
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const updatedItem = {
+      id,
+      ...item,
+    };
+
+    return {
+      status: true,
+      success: {
+        code: 'ITEM-200',
+        message: 'Customer item updated',
+        data: updatedItem,
+      },
+      error: null,
+      status_code: 200,
+    };
+  }
+
+  return postJson(
+    'users/customer-items/update',
+    {
+      id,
+      update_tenancy: 'SWAP.ITEM.UPDATE.ID',
+      item,
+    },
+    false,
+    {},
+    '',
+    'updateCustomerPickupItem'
+  );
+};
+
+export const createCustomerPickupItem = async ({ pickupId, thumbnailFile, item = {} } = {}) => {
+  const initResponse = await addItemToCustomerPickup({
+    pickupId,
+    thumbnailFile,
+  });
+  const initializedItem = getResponsePrimaryRecord(initResponse);
+  const itemId = initializedItem?.id || getResponseData(initResponse)?.id || initResponse?.id || '';
+
+  if (!itemId) {
+    throw new Error('Customer item was created but no item id was returned.');
+  }
+
+  const updateResponse = await updateCustomerPickupItem({
+    id: itemId,
+    item,
+  });
+  const updatedItem = getResponsePrimaryRecord(updateResponse);
+
+  return {
+    itemId,
+    item: updatedItem || { id: itemId, ...item },
+    initResponse,
+    updateResponse,
+  };
 };
 
 export const getCustomerProfile = async (email) => {
@@ -2320,12 +2502,114 @@ export const getSwapPlans = async () => {
   return subscriptions.map(formatPlanLabel);
 };
 
+export const getBrands = async () => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return mockBrands;
+  }
+
+  const response = await postPublicJson(
+    'guests/brands/list',
+    {
+      bs_strict: true,
+    },
+    true,
+    {},
+    'getBrands'
+  );
+
+  return getResponseDataList(response, 'brands');
+};
+
+export const getStyles = async () =>
+  getAuthenticatedTaxonomyList({
+    path: 'users/styles/list',
+    responseKey: 'styles',
+    mockData: mockStyles,
+    callerName: 'getStyles',
+  });
+
+export const getColors = async () =>
+  getAuthenticatedTaxonomyList({
+    path: 'users/colors/list',
+    responseKey: 'colors',
+    mockData: mockColors,
+    callerName: 'getColors',
+  });
+
+export const getMaterials = async () =>
+  getAuthenticatedTaxonomyList({
+    path: 'users/materials/list',
+    responseKey: 'materials',
+    mockData: mockMaterials,
+    callerName: 'getMaterials',
+  });
+
+export const getMadeIns = async () =>
+  getAuthenticatedTaxonomyList({
+    path: 'users/made-ins/list',
+    responseKey: 'made_ins',
+    mockData: mockMadeIns,
+    callerName: 'getMadeIns',
+  });
+
+export const getOccasions = async () =>
+  getAuthenticatedTaxonomyList({
+    path: 'users/occasions/list',
+    responseKey: 'occasions',
+    mockData: mockOccasions,
+    callerName: 'getOccasions',
+  });
+
+export const getCategories = async () => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return mockCategories;
+  }
+
+  const response = await postPublicJson(
+    'guests/categories/list',
+    {},
+    true,
+    {},
+    'getCategories'
+  );
+
+  return getResponseDataList(response, 'categories');
+};
+
+export const getUserSegments = async () => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return mockUserSegments;
+  }
+
+  const guestToken = await resolveGuestAuthToken();
+  const response = await postJson(
+    'users/user-segments/list',
+    DEFAULT_TAXONOMY_LIST_PARAMS,
+    true,
+    {},
+    guestToken,
+    'getUserSegments'
+  );
+
+  return getResponseDataList(response, 'user_segments');
+};
+
 export const getItemEntryOptions = async () => {
   await delay(0);
   return {
     categoryOptions,
     colorOptions,
     conditionOptions,
+    brandOptions: mockBrands,
+    userSegmentOptions: mockUserSegments,
+    styleOptions: mockStyles,
+    colorEntities: mockColors,
+    materialOptions: mockMaterials,
+    madeInOptions: mockMadeIns,
+    occasionOptions: mockOccasions,
   };
 };
 
