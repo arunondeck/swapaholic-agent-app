@@ -63,7 +63,7 @@ export const CustomerPickupDetailScreen = ({ pop, push, customerEmail, pickupId 
   const totalItems = toNumber(subscribe?.number_of_items_c, pickup.totalItems || 0);
   const acceptedItems = toNumber(subscribe?.number_of_accepted_items_c);
   const rejectedItems = toNumber(subscribe?.number_of_rejected_items_c);
-  const remainingItems = Math.max(0, totalItems - (acceptedItems + rejectedItems));
+  const remainingItems = Math.max(0, totalItems - (pickup.items.length));
   const tripDate = formatDateOnly(pickup.trip_date_c || pickup.date);
   const enteredDate = formatDateOnly(pickup.date_entered);
 

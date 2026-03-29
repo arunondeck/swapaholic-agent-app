@@ -40,6 +40,7 @@ import {
   getStoredBuyPointsCustomerId,
   getStoredBuyPointsEmail,
   getStoredBuyPointsToken,
+  getStoredGuestToken,
   getStoredShopCustomerId,
   getStoredShopToken,
 } from '../store/appSessionStorage';
@@ -58,8 +59,8 @@ const SWAP_WALLET_API_URL = (process.env.EXPO_PUBLIC_SWAP_WALLET_API_URL || '').
 const SWAP_API_VERSION = process.env.EXPO_PUBLIC_SWAP_API_VERSION || '';
 const SWAP_USE_MOCK = (process.env.EXPO_PUBLIC_SWAP_USE_MOCK || 'true').toLowerCase() === 'true';
 const BOOTH_USE_MOCK = (process.env.EXPO_PUBLIC_BOOTH_USE_MOCK || process.env.EXPO_PUBLIC_SWAP_USE_MOCK || 'true').toLowerCase() === 'true';
-const DEFAULT_OPS_LOGIN_USERNAME = (process.env.DEFAULTOPS_LOGIN_USERNAME || process.env.DEFAULT_LOGIN_USERNAME || '').trim();
-const DEFAULT_OPS_LOGIN_PASSWORD = process.env.DEFAULTOPS_LOGIN_PASSWORD || process.env.DEFAULT_LOGIN_password || '';
+const DEFAULT_OPS_LOGIN_USERNAME = (process.env.EXPO_PUBLIC_DEFAULTOPS_LOGIN_USERNAME || '').trim();
+const DEFAULT_OPS_LOGIN_PASSWORD = process.env.EXPO_PUBLIC_DEFAULTOPS_LOGIN_PASSWORD || '';
 const APP_LOGIN_PATH = 'guests/customers/get-started';
 const APP_GUEST_REGISTER_PATH = 'guests/register';
 const APP_LOGIN_TENANCY = 'SWAP.AUTH.TYPE.EMAIL';
@@ -870,10 +871,12 @@ export const loginAppUser = async (email, password, authToken = '') => {
   return session;
 };
 
-export const loginAsShopUser = async () => {
+export const loginAsShopUser = async (guestToken = '') => {
   if (!DEFAULT_OPS_LOGIN_USERNAME || !DEFAULT_OPS_LOGIN_PASSWORD) {
     throw new Error('DEFAULTOPS_LOGIN_USERNAME/DEFAULTOPS_LOGIN_PASSWORD credentials are not configured.');
   }
+
+  const resolvedGuestToken = guestToken || getCachedStoredAppSession()?.guestToken || (await getStoredGuestToken());
 
   if (SWAP_USE_MOCK) {
     await delay();
@@ -903,6 +906,11 @@ export const loginAsShopUser = async () => {
     };
   }
 
+  console.log('[swapApi] loginAsShopUser request', {
+    username: DEFAULT_OPS_LOGIN_USERNAME,
+    hasGuestToken: Boolean(resolvedGuestToken),
+    useMock: false,
+  });
   const response = await postJson(
     'users/login',
     {
@@ -910,13 +918,20 @@ export const loginAsShopUser = async () => {
       password: DEFAULT_OPS_LOGIN_PASSWORD,
     },
     true,
-    {},
+    resolvedGuestToken ? { Authorization: `Bearer ${resolvedGuestToken}` } : {},
     '',
     'loginAsShopUser'
   );
 
   const data = response?.success?.data || {};
   const token = data?.token || '';
+  console.log('[swapApi] loginAsShopUser response', {
+    status: response?.status,
+    status_code: response?.status_code,
+    token,
+    user_id: data?.user_id || '',
+    user_type: data?.user_type || '',
+  });
 
   if (!token) {
     throw new Error('Failed to get operator token.');
@@ -1014,6 +1029,62 @@ export const checkCustomerSession = async (token) => {
   }
 
   return extractAuthSession(response, token);
+};
+
+export const checkShopUserSession = async (token) => {
+  if (!token) {
+    throw new Error('Missing operator auth token.');
+  }
+
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return {
+      token,
+      user: {
+        id: 'mock-operator',
+        user_type: 'operator',
+        name: 'Operator',
+      },
+      response: {
+        status: true,
+        success: {
+          code: 'USR-002',
+          message: 'Operator session valid',
+          data: {
+            token,
+          },
+        },
+      },
+    };
+  }
+
+  const response = await postJson(
+    'subscriptions/list',
+    {
+      tenancy: 'SWAP.SUB.TYPE.ITEMS.SHOP',
+    },
+    true,
+    {
+      Authorization: `Bearer ${token}`,
+    },
+    '',
+    'checkShopUserSession'
+  );
+
+  if (!response?.status) {
+    const message = response?.error?.message || response?.success?.message || 'Operator session expired.';
+    throw new Error(message);
+  }
+
+  return {
+    token,
+    user: {
+      id: response?.success?.data?.user_id || '',
+      user_type: response?.success?.data?.user_type || 'operator',
+      name: response?.success?.data?.name || '',
+    },
+    response,
+  };
 };
 
 export const getWalletBalances = async (token, email = '') => {
@@ -1133,19 +1204,7 @@ const resolveBuyPointsSession = async () => {
     };
   }
 
-  const loginResponse = await loginAsCustomer(normalizedEmail);
-  const token = loginResponse?.token || '';
-  const customerId = loginResponse?.customer?.id || '';
-
-  if (!token || !customerId) {
-    throw new Error('Failed to resolve buy-points user session.');
-  }
-
-  return {
-    email: normalizedEmail,
-    token,
-    customerId,
-  };
+  throw new Error('Buy-points token is unavailable. Rehydrate app session to obtain and persist it.');
 };
 
 const resolveCustomerAuthToken = async (customerEmail = '', authToken = '') => {
@@ -1156,6 +1215,16 @@ const resolveCustomerAuthToken = async (customerEmail = '', authToken = '') => {
   const normalizedEmail = String(customerEmail || '').trim().toLowerCase();
   if (!normalizedEmail) {
     return '';
+  }
+
+  const cachedSession = getCachedStoredAppSession();
+  const storedBuyPointsEmail = String(cachedSession?.buyPointsEmail || (await getStoredBuyPointsEmail()) || '').trim().toLowerCase();
+  if (storedBuyPointsEmail && normalizedEmail === storedBuyPointsEmail) {
+    const storedBuyPointsToken = cachedSession?.buyPointsToken || (await getStoredBuyPointsToken());
+    if (!storedBuyPointsToken) {
+      throw new Error('Buy-points token is unavailable. Rehydrate app session to obtain and persist it.');
+    }
+    return storedBuyPointsToken;
   }
 
   const loginResponse = await loginAsCustomer(normalizedEmail);
@@ -1567,34 +1636,38 @@ export const getAllCustomerPickups = async (email) => {
     return getMockCustomerProfile(email).pickups || customerPickups;
   }
 
-  const shopSession = await loginAsShopUser();
-  const shopToken = shopSession?.token || '';
   const normalizedEmail = String(email || '').trim().toLowerCase();
+  const session = await createCustomerSession(normalizedEmail);
+  const customerToken = session?.loginResponse?.token || '';
 
-  if (!normalizedEmail || !shopToken) {
-    return EMPTY_ARRAY;
+  if (!normalizedEmail || !customerToken) {
+    throw new Error('Customer token is unavailable for pickups list.');
   }
 
+  console.log('[swapApi] getCustomerPickups token', {
+    email: normalizedEmail,
+    token: String(customerToken),
+    source: 'customer-session',
+  });
+
   const response = await postJson(
-    'users/pickups/list',
-    {
-      status_c: 'processing',
-      filter_tenancy: 'SWAP.PICKUP.FILTER.CUSTOMER_EMAIL',
-      customer_email: normalizedEmail,
-      sent_to_logistics: 'no',
-      sort_tenancy: 'SWAP.PICKUP.SORT.DATE_ENTERED',
-      sort_type: 'SWAP.PICKUP.SORT_TYPE.DESC',
-      max_results: 20,
-      offset: 0,
-      data_mode: '',
-    },
+    'pickups/list',
+    {},
     true,
     {},
-    shopToken,
+    customerToken,
     'getCustomerPickups'
   );
 
-  return (response?.pickups || EMPTY_ARRAY).map(mapApiPickupToPickup);
+  const responseData = getResponseData(response);
+  const rawPickups = responseData?.pickups || response?.pickups || EMPTY_ARRAY;
+  console.log('[swapApi] getCustomerPickups raw response', {
+    email: normalizedEmail,
+    response,
+    extractedCount: Array.isArray(rawPickups) ? rawPickups.length : 0,
+  });
+
+  return (Array.isArray(rawPickups) ? rawPickups : EMPTY_ARRAY).map(mapApiPickupDetailToPickup);
 };
 
 /**
@@ -1689,7 +1762,15 @@ export const getCustomerPickupDetails = async (email, pickupId) => {
     'getCustomerPickupDetails'
   );
 
-  const pickup = response?.pickup || null;
+  const responseData = getResponseData(response);
+  const pickup = responseData?.pickup || response?.pickup || null;
+  console.log('[swapApi] getCustomerPickupDetails raw response', {
+    email,
+    pickupId,
+    response,
+    hasPickup: Boolean(pickup),
+  });
+
   return pickup ? mapApiPickupDetailToPickup(pickup) : null;
 };
 
@@ -1806,7 +1887,10 @@ export const getSubscriptionsList = async (tenancy = 'SWAP.SUB.TYPE.ITEMS.STORE'
     return toMockSubscriptionListResponse(tenancy);
   }
 
-  const resolvedAuthToken = authToken || (await loginAsShopUser())?.token || '';
+  const resolvedAuthToken = authToken || getCachedStoredAppSession()?.shopToken || (await getStoredShopToken());
+  if (!resolvedAuthToken) {
+    throw new Error('Operator token is unavailable. Rehydrate app session to obtain and persist it.');
+  }
   return postJson('subscriptions/list', { tenancy }, true, {}, resolvedAuthToken, 'getSubscriptionsList');
 };
 

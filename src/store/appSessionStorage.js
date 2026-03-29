@@ -24,7 +24,7 @@ export const loadStoredAppSession = async () => {
 
 export const saveStoredAppSession = async (session) => {
   try {
-    if (!session?.shopToken && !session?.boothToken && !session?.buyPointsToken) {
+    if (!session?.shopToken && !session?.boothToken && !session?.buyPointsToken && !session?.guestToken) {
       appSessionCache = null;
       await AsyncStorage.removeItem(APP_SESSION_STORAGE_KEY);
       return;
@@ -81,4 +81,9 @@ export const getStoredBuyPointsToken = async () => {
 export const getStoredBuyPointsCustomerId = async () => {
   const session = appSessionCache || (await loadStoredAppSession());
   return session?.buyPointsCustomerId || '';
+};
+
+export const getStoredGuestToken = async () => {
+  const session = appSessionCache || (await loadStoredAppSession());
+  return session?.guestToken || '';
 };

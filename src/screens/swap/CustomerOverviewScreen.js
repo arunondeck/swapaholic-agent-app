@@ -171,7 +171,6 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
     );
   }
 
-  const swapInTargetPickup = pickups.find((pickup) => Number.parseInt(String(pickup.remainingItems || 0), 10) > 0);
   const shopSubscribeExpiry = parseDateValue(shopSubscribe?.expiry_date_c);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -185,7 +184,6 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
     : hasActiveShopSubscribe && activeSubscription
       ? `${activeSubscription.status} | Renews ${activeSubscription.renewalDate || 'NA'}`
       : '';
-  const canAddToSubscription = hasActiveShopSubscribe && Number.parseInt(String(activeSubscription?.itemsRemaining || 0), 10) > 0;
   const canOpenLatestPackage = Boolean(displayedPackageName && latestSubscriptionId);
 
   return (
@@ -279,19 +277,6 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
         <TouchableOpacity
           style={styles.overviewActionButton}
           onPress={() => {
-            if (swapInTargetPickup) {
-              push('customerPickupDetail', { email: customer.email, pickupId: swapInTargetPickup.id });
-              return;
-            }
-
-            if (activeSubscription && canAddToSubscription) {
-              push('customerSubscriptionDetail', {
-                email: customer.email,
-                subscriptionId: activeSubscription.id,
-              });
-              return;
-            }
-
             push('customerPickups', { email: customer.email });
           }}
         >

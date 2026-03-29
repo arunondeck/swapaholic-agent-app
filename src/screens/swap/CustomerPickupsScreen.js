@@ -43,6 +43,14 @@ export const CustomerPickupsScreen = ({ pop, push, customerEmail }) => {
         } else {
           await withLoader(Promise.all([profilePromise, pickupsPromise]), 'Loading pickups...');
         }
+        const latestState = useSwapStore.getState();
+        console.log('[swapUi] CustomerPickupsScreen loaded', {
+          customerEmail,
+          pickupCount: Array.isArray(latestState.currentCustomerData.pickups?.data)
+            ? latestState.currentCustomerData.pickups.data.length
+            : 0,
+          pickupsEntry: latestState.currentCustomerData.pickups,
+        });
       } catch {
         // Store entries capture fetch errors for rendering.
       }
@@ -61,6 +69,7 @@ export const CustomerPickupsScreen = ({ pop, push, customerEmail }) => {
 
   return (
     <ScreenShell title="Pickups" subtitle={`${customer.name} pickup list`} onBack={pop} backgroundColor="#ffe4e1">
+      {pickups.length === 0 ? <Text>{error || 'No pickups found for this customer.'}</Text> : null}
       {pickups.map((pickup) => (
         <TouchableOpacity
           key={pickup.id}
