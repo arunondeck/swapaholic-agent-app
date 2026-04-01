@@ -43,6 +43,7 @@ import {
   mutateBooth,
   mutateBoothProduct,
 } from './boothGraphqlApi';
+import { getRemainingItemsCount } from '../utils/subscriptionMetrics';
 import {
   getCachedStoredAppSession,
   loadStoredAppSession,
@@ -419,13 +420,27 @@ const mapApiCustomerToProfile = (customer, email = '', wallets = {}) => ({
 
 const mapWalletResponseToWallets = (response) => response?.wallets || {};
 
+/**
+ * @param {import('../types/swapTypes').SwapCustomerSubscribe} subscription
+ * @returns {import('../types/swapTypes').SwapSubscription}
+ */
 const mapApiSubscribeToSubscription = (subscription) => ({
   id: subscription.id,
+  uniqueId: subscription.unique_id_c || subscription.id || '',
   plan: subscription.subscription?.name || subscription.name || 'Subscription',
   status: subscription.status_c || 'Unknown',
   startDate: subscription.date_entered || 'NA',
   renewalDate: subscription.expiry_date_c || 'NA',
-  itemsRemaining: toNumber(subscription.number_of_items_c),
+  subscriptionType: subscription.subscription?.type_c || subscription.type_c || '',
+  subscriptionSubType: subscription.subscription?.sub_type_c || subscription.sub_type_c || '',
+  description: subscription.subscription?.description || subscription.description || '',
+  numberOfPoints: toNumber(subscription.number_of_points_c),
+  numberOfItems: toNumber(subscription.number_of_items_c),
+  acceptedItems: toNumber(subscription.number_of_accepted_items_c),
+  rejectedItems: toNumber(subscription.number_of_rejected_items_c),
+  itemsSwapped: toNumber(subscription.items_swapped_c),
+  deliveriesDone: toNumber(subscription.deliveries_done_c),
+  itemsRemaining: toNumber(subscription.remaining_items_c, toNumber(subscription.number_of_items_c)),
   items: EMPTY_ARRAY,
 });
 
@@ -493,9 +508,6 @@ const mapApiPickupDetailToPickup = (pickup) => {
   const subscribe = subscribeList[0] || null;
   const items = (pickup?.customer_items || EMPTY_ARRAY).map((item) => mapApiPickupCustomerItemToProduct(item, pickup, customer));
   const totalItems = toNumber(subscribe?.number_of_items_c, toNumber(pickup?.number_of_items_c));
-  const itemsAdded = toNumber(pickup?.items_added, items.length);
-  const acceptedItems = toNumber(subscribe?.number_of_accepted_items_c);
-  const rejectedItems = toNumber(subscribe?.number_of_rejected_items_c);
   const addressParts = [
     pickup?.street_address_c,
     pickup?.apt_no_c,
@@ -519,7 +531,7 @@ const mapApiPickupDetailToPickup = (pickup) => {
     date: pickup?.trip_date_c || pickup?.date_entered || 'NA',
     address: addressParts || pickup?.street_address_c || 'NA',
     totalItems,
-    remainingItems: Math.max(0, totalItems - (acceptedItems + rejectedItems || itemsAdded)),
+    remainingItems: getRemainingItemsCount(totalItems, items),
     items,
   };
 };
@@ -1842,21 +1854,40 @@ export const getCustomerSubscriptionDetails = async (email, subscriptionId) => {
 
   const session = await createCustomerSession(email);
   const customerId = session?.loginResponse?.customer?.id;
+  const customerToken = session?.loginResponse?.token || '';
 
   if (!customerId) {
     return null;
   }
 
   const response = await postJson('subscribes/get', {
-    tenancy: 'SWAP.SUBSCRIBE.GET.BY_ID',
+    tenancy: 'SWAP.SUBSCRIBE.GET.CUST_ID',
     customer_id_c: customerId,
+    subscribe_type_c: 'shop',
     subscribe_id_c: subscriptionId,
-    fetch_items: true,
-  }, true, {}, '', 'getCustomerSubscriptionDetails');
+  }, true, {}, customerToken, 'getCustomerSubscriptionDetails');
 
-  const subscription = getResponseData(response).subscribe || getResponseData(response).subscription || null;
+  const responseData = getResponseData(response);
+  const primaryRecord = getResponsePrimaryRecord(response);
+  const matchingSubscriptionFromList = Array.isArray(responseData?.subscribes)
+    ? responseData.subscribes.find(
+        (entry) =>
+          String(entry?.id || '').trim() === String(subscriptionId || '').trim() ||
+          String(entry?.unique_id_c || '').trim() === String(subscriptionId || '').trim()
+      ) || null
+    : null;
+  const subscription =
+    responseData?.subscribe ||
+    responseData?.subscription ||
+    matchingSubscriptionFromList ||
+    (primaryRecord?.id ? primaryRecord : null) ||
+    null;
 
   if (!subscription) {
+    console.log('[swapApi] getCustomerSubscriptionDetails empty payload', {
+      subscriptionId,
+      response,
+    });
     return null;
   }
 
@@ -1998,6 +2029,41 @@ export const getLatestPickupForSubscription = async (email, subscriptionId) => {
   });
 
   return resolvedPickup;
+};
+
+/**
+ * Get all pickups linked to a subscription.
+ * @param {string} email
+ * @param {string} subscriptionId
+ * @returns {Promise<import('../types/swapTypes').SwapPickup[]>}
+ */
+export const getPickupsForSubscription = async (email, subscriptionId) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    const pickups = getMockCustomerProfile(email).pickups || customerPickups;
+    return pickups.filter((pickup) => String(pickup?.subscriptionId || '') === String(subscriptionId || ''));
+  }
+
+  const session = await createCustomerSession(email);
+  const customerToken = session?.loginResponse?.token || '';
+
+  if (!subscriptionId || !customerToken) {
+    return EMPTY_ARRAY;
+  }
+
+  const response = await postJson(
+    'pickups/list/by-subscribe',
+    {
+      subscribe_id_c: subscriptionId,
+    },
+    true,
+    {},
+    customerToken,
+    'getPickupsForSubscription'
+  );
+
+  const pickups = getResponseData(response).pickups || EMPTY_ARRAY;
+  return Array.isArray(pickups) ? pickups.map(mapApiPickupDetailToPickup) : EMPTY_ARRAY;
 };
 
 /**

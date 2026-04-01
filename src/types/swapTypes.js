@@ -33,7 +33,16 @@
  */
 
 /**
- * @typedef {SwapNamedEntity & {subscribe_type_c?: string, status_c?: string}} SwapSubscribe
+ * @typedef {SwapNamedEntity & {
+ *   unique_id_c?: string,
+ *   subscribe_type_c?: string,
+ *   sub_type_c?: string,
+ *   type_c?: string,
+ *   status_c?: string,
+ *   description?: string,
+ *   date_entered?: string,
+ *   expiry_date_c?: string
+ * }} SwapSubscribe
  */
 
 /**
@@ -50,21 +59,36 @@
  * @typedef {SwapNamedEntity & {
  *   validity_c?: string,
  *   number_of_items_c?: string,
+ *   number_of_points_c?: string,
  *   price_c?: string,
  *   type_c?: string,
- *   status_c?: string
+ *   sub_type_c?: string,
+ *   status_c?: string,
+ *   description?: string,
+ *   discount_matrix_c?: Array<Record<string, unknown>>
  * }} SwapSubscriptionPlan
  */
 
 /**
  * @typedef {SwapSubscribe & {
  *   number_of_items_c?: string,
+ *   number_of_points_c?: string,
  *   expiry_date_c?: string,
  *   number_of_accepted_items_c?: string,
  *   number_of_rejected_items_c?: string,
  *   items_swapped_c?: string,
+ *   deliveries_done_c?: string,
+ *   remaining_items_c?: string,
  *   subscription?: SwapSubscriptionPlan | null
  * }} SwapCustomerSubscribe
+ */
+
+/**
+ * @typedef {{
+ *   subscribe: SwapCustomerSubscribe | null,
+ *   shop_subscribe: SwapCustomerSubscribe | null,
+ *   event_subscribe: SwapCustomerSubscribe | null
+ * }} SwapCustomerSubscribeCollection
  */
 
 /**
@@ -285,7 +309,25 @@
  */
 
 /**
- * @typedef {{ id: string, plan: string, status: string, startDate: string, renewalDate: string, itemsRemaining: number, items: Array<Record<string, string>> }} SwapSubscription
+ * @typedef {{
+ *   id: string,
+ *   uniqueId?: string,
+ *   plan: string,
+ *   status: string,
+ *   startDate: string,
+ *   renewalDate: string,
+ *   subscriptionType?: string,
+ *   subscriptionSubType?: string,
+ *   description?: string,
+ *   numberOfPoints?: number,
+ *   numberOfItems?: number,
+ *   acceptedItems?: number,
+ *   rejectedItems?: number,
+ *   itemsSwapped?: number,
+ *   deliveriesDone?: number,
+ *   itemsRemaining: number,
+ *   items: SwapProduct[]
+ * }} SwapSubscription
  */
 
 /**

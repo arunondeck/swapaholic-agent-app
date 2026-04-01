@@ -1,11 +1,12 @@
 import React, { useEffect } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
-import { SwapProductCard } from '../../components/SwapProductCard';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
+import { SwappedInItemsSection } from '../../components/SwappedInItemsSection';
 import { useLoader } from '../../context/LoaderContext';
 import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
+import { getRemainingItemsCount } from '../../utils/subscriptionMetrics';
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number.parseInt(String(value ?? fallback), 10);
@@ -63,7 +64,7 @@ export const CustomerPickupDetailScreen = ({ pop, push, customerEmail, pickupId 
   const totalItems = toNumber(subscribe?.number_of_items_c, pickup.totalItems || 0);
   const acceptedItems = toNumber(subscribe?.number_of_accepted_items_c);
   const rejectedItems = toNumber(subscribe?.number_of_rejected_items_c);
-  const remainingItems = Math.max(0, totalItems - (pickup.items.length));
+  const remainingItems = getRemainingItemsCount(totalItems, pickup.items);
   const tripDate = formatDateOnly(pickup.trip_date_c || pickup.date);
   const enteredDate = formatDateOnly(pickup.date_entered);
 
@@ -78,14 +79,7 @@ export const CustomerPickupDetailScreen = ({ pop, push, customerEmail, pickupId 
         <Row label="Items Remaining" value={String(remainingItems)} />
       </View>
 
-      <Text style={styles.sectionTitle}>Items Swapped In</Text>
-      {(pickup.items || []).map((item) => (
-        <SwapProductCard
-          key={item.id}
-          product={item}
-          subtitle={`Item ID: ${item.unique_item_id_c || item.id} | ${item.category?.name || 'NA'} | ${item.style?.name || 'NA'}`}
-        />
-      ))}
+      <SwappedInItemsSection items={pickup.items || []} />
 
       {remainingItems > 0 ? (
         <TouchableOpacity

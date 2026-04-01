@@ -303,6 +303,60 @@ export const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 10,
   },
+  subscriptionPlanRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  subscriptionPlanCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  subscriptionIdentityBlock: {
+    gap: 2,
+  },
+  subscriptionIdentityValue: {
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  subscriptionDetailBlock: {
+    gap: 4,
+  },
+  subscriptionDetailValue: {
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  subscriptionDetailDivider: {
+    height: 1,
+    backgroundColor: '#e5e7eb',
+    marginVertical: 6,
+  },
+  subscriptionBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#7a1d1d',
+  },
+  subscriptionBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  subscriptionCardCompleted: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#d1d5db',
+    opacity: 0.82,
+  },
+  subscriptionStatusExpired: {
+    color: '#b91c1c',
+  },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   rowLabel: { color: '#6b7280', fontSize: 12, textTransform: 'uppercase' },
   rowValue: { color: '#111827', fontSize: 13, fontWeight: '600' },
@@ -370,7 +424,8 @@ export const styles = StyleSheet.create({
     color: '#476543',
   },
   overviewTableHintExpired: {
-    color: '#6b7280',
+    color: '#ff0000',
+    fontWeight: 600,
   },
   overviewActionGrid: {
     flexDirection: 'row',
