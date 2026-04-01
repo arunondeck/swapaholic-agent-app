@@ -45,6 +45,7 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
   const { withLoader } = useLoader();
   const buyPointsEmail = useAppSessionStore((state) => state.buyPointsEmail);
   const shopPointsSubscriptions = useSwapStore((state) => state.shopPointsSubscriptions);
+  const activeCustomer = useSwapStore((state) => state.activeCustomer);
   const cartEntry = useSwapStore((state) => state.currentCustomerData.checkoutCart);
   const fetchShopPointsSubscriptions = useSwapStore((state) => state.fetchShopPointsSubscriptions);
   const invalidateCustomerCache = useSwapStore((state) => state.invalidateCustomerCache);
@@ -125,6 +126,7 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
   const pointsToBuy = paymentSummary.pointsToBuy;
   const cashPayable = paymentSummary.cashPayable;
   const checkoutLookupEmail = customer?.email || customerEmail || buyPointsEmail || '';
+  const checkoutLookupToken = activeCustomer?.token || activeCustomer?.loginResponse?.token || '';
   const checkoutTitle = isCustomerMode ? 'Checkout with Points' : 'Buy Points Checkout';
   const checkoutSubtitle = isCustomerMode
     ? 'Scan items, add manual products, and redeem points'
@@ -150,7 +152,7 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
     }
 
     try {
-      const product = await withLoader(findProductByQrCode(checkoutLookupEmail, code), 'Finding product...');
+      const product = await withLoader(findProductByQrCode(checkoutLookupEmail, code, checkoutLookupToken), 'Finding product...');
 
       if (!product) {
         return;

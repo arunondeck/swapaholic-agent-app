@@ -467,6 +467,18 @@ const mapApiSubscriptionItem = (item) => ({
   size: item?.size_c || item?.size || 'NA',
 });
 
+const mapCustomerItemToCheckoutCartItem = (item) => ({
+  id: item?.id || item?.unique_item_id_c || item?.unique_id_c || '',
+  sku: item?.unique_item_id_c || item?.unique_id_c || item?.sku || '',
+  unique_item_id_c: item?.unique_item_id_c || item?.unique_id_c || item?.sku || '',
+  name: item?.name || 'Unnamed Product',
+  size: item?.size?.name || item?.size_c || item?.size || 'NA',
+  brand: item?.brand?.name || item?.brand_c || item?.brand || 'NA',
+  points: String(item?.points || (item?.evaluated_points_c ? `${item.evaluated_points_c} pts` : '0')),
+  evaluated_points_c: String(item?.evaluated_points_c || toPointsValue(item?.points)),
+  thumbnail_c: item?.thumbnail_c || item?.thumbnail || item?.image || item?.images?.[0]?.name || '',
+});
+
 const toNamedEntity = (value, fallback = 'NA') => {
   if (value && typeof value === 'object') {
     return {
@@ -653,7 +665,7 @@ const buildUrl = (path, withVersion = true) => {
 const buildWalletUrl = (path) => `${SWAP_WALLET_API_URL}/${path.replace(/^\//, '')}`;
 
 const withSwapAuthHeader = async (headers = {}, authToken = '') => {
-  if (headers.Authorization) {
+  if (headers.Authorization || headers.token) {
     return headers;
   }
 
@@ -667,7 +679,7 @@ const logApiRequest = ({ callerName = 'unknown', method, url, payload, headers }
     method,
     url,
     payload,
-    hasAuth: Boolean(headers?.Authorization),
+    hasAuth: Boolean(headers?.Authorization || headers?.token),
   });
 };
 
@@ -1172,10 +1184,8 @@ export const checkShopUserSession = async (token) => {
   }
 
   const response = await postJson(
-    'subscriptions/list',
-    {
-      tenancy: 'SWAP.SUB.TYPE.ITEMS.SHOP',
-    },
+    'users/check-session',
+    {},
     true,
     {
       Authorization: `Bearer ${token}`,
@@ -1340,8 +1350,19 @@ const resolveCustomerAuthToken = async (customerEmail = '', authToken = '') => {
     return storedBuyPointsToken;
   }
 
-  const loginResponse = await loginAsCustomer(normalizedEmail);
-  return loginResponse?.token || '';
+  const session = await createCustomerSession(normalizedEmail);
+  let customerToken = session?.loginResponse?.token || session?.token || '';
+
+  if (!customerToken) {
+    const refreshedSession = await authenticateCustomer(normalizedEmail, { forceRefresh: true });
+    customerToken = refreshedSession?.loginResponse?.token || refreshedSession?.token || '';
+  }
+
+  if (!customerToken) {
+    throw new Error(`Customer token is unavailable for ${normalizedEmail}.`);
+  }
+
+  return customerToken;
 };
 
 const resolveSwapSrUserId = async () => {
@@ -2619,9 +2640,10 @@ export const getCustomerCheckoutCart = async (email) => {
  * Finds a product by scanned QR payload.
  * @param {string} email
  * @param {string} scanText
+ * @param {string} [authToken='']
  * @returns {Promise<{ sku: string, name: string, size: string, points: string } | null>}
  */
-export const findProductByQrCode = async (email, scanText) => {
+export const findProductByQrCode = async (email, scanText, authToken = '') => {
   if (SWAP_USE_MOCK) {
     await delay();
     const customerCart = getMockCustomerProfile(email).checkoutCart || customerCheckoutCart;
@@ -2644,9 +2666,37 @@ export const findProductByQrCode = async (email, scanText) => {
     );
   }
 
-  // Stub for live API integration.
-  // TODO: Replace with endpoint when product lookup API is available.
-  return null;
+  const query = String(scanText || '').trim();
+  if (!query) {
+    return null;
+  }
+
+  const customerAuthToken = await resolveCustomerAuthToken(email, authToken);
+  const response = await postJson(
+    'customer-items/get/item',
+    {
+      data_tenancy: 'SWAP.ITEM.DATA_VIEW.ONLY_RECORD',
+      view_tenancy: 'SWAP.ITEM.IMAGE_VIEW.NONE',
+      detail_tenancy: 'SWAP.ITEM.DETAIL_VIEW.UNIQUE_ID',
+      unique_item_id_c: query,
+    },
+    true,
+    {},
+    customerAuthToken,
+    'findProductByQrCode'
+  );
+
+  if (response?.status === false) {
+    const error = getResponseError(response);
+    throw new Error(error?.message || 'Unable to find item from QR code.');
+  }
+
+  const item = getResponsePrimaryRecord(response);
+  if (!item || item.available_c === 'no') {
+    return null;
+  }
+
+  return mapCustomerItemToCheckoutCartItem(item);
 };
 
 export const getSwapPlans = async () => {
