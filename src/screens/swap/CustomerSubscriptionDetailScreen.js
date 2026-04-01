@@ -121,7 +121,7 @@ export const CustomerSubscriptionDetailScreen = ({ pop, push, customerEmail, sub
     >
       <View style={styles.listItem}>
         <Row label="Plan" value={subscription.plan} />
-        <Row label="Type" value={getSubscriptionTypeLabel(subscription)} />
+        {/* <Row label="Type" value={getSubscriptionTypeLabel(subscription)} /> */}
         <Row label="Activated" value={formatSubscriptionDateTime(subscription.startDate)} />
         <Row label="Expiry Date" value={formatSubscriptionDate(subscription.renewalDate)} />
         <View style={styles.row}>
