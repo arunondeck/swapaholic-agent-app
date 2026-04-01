@@ -45,6 +45,8 @@ import {
 } from './boothGraphqlApi';
 import {
   getCachedStoredAppSession,
+  loadStoredAppSession,
+  saveStoredAppSession,
   getStoredBuyPointsCustomerId,
   getStoredBuyPointsEmail,
   getStoredBuyPointsToken,
@@ -125,7 +127,49 @@ const DEFAULT_TAXONOMY_LIST_PARAMS = {
   order_by: 'name ASC',
 };
 
-const resolveGuestAuthToken = async () => getCachedStoredAppSession()?.guestToken || (await getStoredGuestToken());
+const DEFAULT_MATERIALS_LIST_PARAMS = {
+  max_results: 100,
+  offset: 0,
+};
+
+const persistAppSessionPatch = async (patch = {}) => {
+  const currentSession = getCachedStoredAppSession() || (await loadStoredAppSession()) || {};
+  const nextSession = {
+    ...currentSession,
+    ...patch,
+  };
+  await saveStoredAppSession(nextSession);
+  return nextSession;
+};
+
+const resolveGuestAuthToken = async () => {
+  const storedGuestToken = getCachedStoredAppSession()?.guestToken || (await getStoredGuestToken());
+  if (storedGuestToken) {
+    return storedGuestToken;
+  }
+
+  const guestSession = await registerGuestSession();
+  const guestToken = guestSession?.guestToken || guestSession?.token || '';
+  if (guestToken) {
+    await persistAppSessionPatch({ guestToken });
+  }
+  return guestToken;
+};
+
+const resolveAppUserAuthToken = async () => {
+  const storedAppUserToken = getCachedStoredAppSession()?.shopToken || (await getStoredShopToken());
+  if (storedAppUserToken) {
+    return storedAppUserToken;
+  }
+
+  const guestToken = await resolveGuestAuthToken();
+  const appUserSession = await loginAsShopUser(guestToken);
+  const appUserToken = appUserSession?.token || '';
+  if (appUserToken) {
+    await persistAppSessionPatch({ guestToken, shopToken: appUserToken });
+  }
+  return appUserToken;
+};
 
 const getCustomerItemsListData = (response) => {
   if (response?.success?.data && typeof response.success.data === 'object') {
@@ -2537,13 +2581,58 @@ export const getColors = async () =>
     callerName: 'getColors',
   });
 
-export const getMaterials = async () =>
-  getAuthenticatedTaxonomyList({
-    path: 'users/materials/list',
-    responseKey: 'materials',
-    mockData: mockMaterials,
-    callerName: 'getMaterials',
-  });
+export const getMaterials = async () => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return mockMaterials;
+  }
+
+  const authToken = await resolveAppUserAuthToken();
+  const materials = [];
+  const seenMaterialIds = new Set();
+  let nextOffset = DEFAULT_MATERIALS_LIST_PARAMS.offset;
+
+  while (nextOffset >= 0) {
+    const response = await postJson(
+      'v3/users/materials/list',
+      {
+        ...DEFAULT_MATERIALS_LIST_PARAMS,
+        offset: nextOffset,
+      },
+      false,
+      {},
+      authToken,
+      'getMaterials'
+    );
+
+    const pageMaterials = Array.isArray(response?.materials) ? response.materials : EMPTY_ARRAY;
+    pageMaterials.forEach((material) => {
+      const materialId = String(material?.id || '');
+      const dedupeKey = materialId || JSON.stringify(material);
+      if (!seenMaterialIds.has(dedupeKey)) {
+        seenMaterialIds.add(dedupeKey);
+        materials.push(material);
+      }
+    });
+
+    const resolvedNextOffset = Number(response?.next_offset);
+    if (Number.isFinite(resolvedNextOffset) && resolvedNextOffset >= 0) {
+      nextOffset = resolvedNextOffset;
+      continue;
+    }
+
+    const totalCount = Number(response?.total_count);
+    const resultCount = Number(response?.result_count);
+    if (Number.isFinite(totalCount) && materials.length < totalCount && Number.isFinite(resultCount) && resultCount > 0) {
+      nextOffset += resultCount;
+      continue;
+    }
+
+    break;
+  }
+
+  return materials;
+};
 
 export const getMadeIns = async () =>
   getAuthenticatedTaxonomyList({
@@ -2586,7 +2675,7 @@ export const getUserSegments = async () => {
 
   const guestToken = await resolveGuestAuthToken();
   const response = await postJson(
-    'users/user-segments/list',
+    'guests/user-segments/list',
     DEFAULT_TAXONOMY_LIST_PARAMS,
     true,
     {},
