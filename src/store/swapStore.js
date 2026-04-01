@@ -3,6 +3,7 @@ import {
   getActivePackageDetails,
   getAllSubscriptions,
   getBrands,
+  getCustomerCheckoutCart,
   getCategories,
   getColors,
   getCustomerOrderDetails,
@@ -43,6 +44,7 @@ const toLoadedEntry = (data) => createCacheEntry(data, Date.now());
 const createCustomerDataCache = () => ({
   profile: createCacheEntry(null),
   activePackage: createCacheEntry(null),
+  checkoutCart: createCacheEntry([]),
   pickups: createCacheEntry([]),
   subscriptions: createCacheEntry([]),
   orders: createCacheEntry([]),
@@ -147,6 +149,7 @@ export const useSwapStore = create((set, get) => ({
   shopItemsSubscriptionsLoading: false,
   shopItemsSubscriptionsError: '',
   activeCustomer: null,
+  currentCustomerEmail: '',
   currentCustomerOwnerKey: '',
   currentCustomerData: createCustomerDataCache(),
   referenceData: createReferenceDataCache(),
@@ -168,6 +171,7 @@ export const useSwapStore = create((set, get) => ({
   },
   clearCurrentCustomerData: () =>
     set({
+      currentCustomerEmail: '',
       currentCustomerData: createCustomerDataCache(),
     }),
   fetchReferenceDataIfNeeded: async ({ force = false } = {}) => {
@@ -264,6 +268,7 @@ export const useSwapStore = create((set, get) => ({
         switch (key) {
           case 'profile':
           case 'activePackage':
+          case 'checkoutCart':
           case 'pickups':
           case 'subscriptions':
           case 'orders':
@@ -308,6 +313,7 @@ export const useSwapStore = create((set, get) => ({
           loginResponse: session?.loginResponse || null,
           walletResponse: session?.walletResponse || null,
         },
+        currentCustomerEmail: email,
         currentCustomerOwnerKey: ownerKey,
         currentCustomerData,
       };
@@ -331,17 +337,19 @@ export const useSwapStore = create((set, get) => ({
   },
   fetchCustomerProfileIfNeeded: async (email, { force = false } = {}) => {
     const normalizedEmail = normalizeEmail(email || get().activeCustomer?.email || '');
-    const currentEntry = get().currentCustomerData.profile;
+    const customerChanged = Boolean(get().currentCustomerEmail && get().currentCustomerEmail !== normalizedEmail);
+    const currentEntry = customerChanged ? createCacheEntry(null) : get().currentCustomerData.profile;
 
     if (!force && isCustomerCacheUsable(currentEntry, get().customerCacheTtlMs)) {
       return currentEntry.data;
     }
 
     set((state) => ({
+      currentCustomerEmail: normalizedEmail,
       currentCustomerData: {
-        ...state.currentCustomerData,
+        ...(customerChanged ? createCustomerDataCache() : state.currentCustomerData),
         profile: {
-          ...state.currentCustomerData.profile,
+          ...(customerChanged ? createCacheEntry(null) : state.currentCustomerData.profile),
           loading: true,
           error: '',
         },
@@ -351,6 +359,7 @@ export const useSwapStore = create((set, get) => ({
     try {
       const profile = await getCustomerProfile(normalizedEmail);
       set((state) => ({
+        currentCustomerEmail: normalizedEmail,
         currentCustomerOwnerKey: getCustomerOwnerKey({ email: normalizedEmail, customerId: profile?.id || getCustomerIdFromSession({ profile }) }),
         currentCustomerData: {
           ...state.currentCustomerData,
@@ -372,6 +381,90 @@ export const useSwapStore = create((set, get) => ({
       throw error;
     }
   },
+  fetchCustomerCheckoutCartIfNeeded: async (email, { force = false } = {}) => {
+    const normalizedEmail = normalizeEmail(email || get().activeCustomer?.email || '');
+    const customerChanged = Boolean(get().currentCustomerEmail && get().currentCustomerEmail !== normalizedEmail);
+    const currentEntry = customerChanged ? createCacheEntry([]) : get().currentCustomerData.checkoutCart;
+
+    if (!force && isCustomerCacheUsable(currentEntry, get().customerCacheTtlMs)) {
+      return currentEntry.data || [];
+    }
+
+    set((state) => ({
+      currentCustomerEmail: normalizedEmail,
+      currentCustomerData: {
+        ...(customerChanged ? createCustomerDataCache() : state.currentCustomerData),
+        checkoutCart: {
+          ...(customerChanged ? createCacheEntry([]) : state.currentCustomerData.checkoutCart),
+          loading: true,
+          error: '',
+        },
+      },
+    }));
+
+    try {
+      const checkoutCart = await getCustomerCheckoutCart(normalizedEmail);
+      set((state) => ({
+        currentCustomerData: {
+          ...state.currentCustomerData,
+          checkoutCart: toLoadedEntry(checkoutCart || []),
+        },
+      }));
+      return checkoutCart || [];
+    } catch (error) {
+      set((state) => ({
+        currentCustomerData: {
+          ...state.currentCustomerData,
+          checkoutCart: {
+            ...state.currentCustomerData.checkoutCart,
+            loading: false,
+            error: error?.message || 'Failed to load checkout cart.',
+          },
+        },
+      }));
+      throw error;
+    }
+  },
+  setCustomerCheckoutCart: (items = []) =>
+    set((state) => ({
+      currentCustomerData: {
+        ...state.currentCustomerData,
+        checkoutCart: toLoadedEntry(Array.isArray(items) ? items : []),
+      },
+    })),
+  addCustomerCheckoutCartItem: (item) =>
+    set((state) => {
+      const currentItems = Array.isArray(state.currentCustomerData.checkoutCart.data)
+        ? state.currentCustomerData.checkoutCart.data
+        : [];
+
+      return {
+        currentCustomerData: {
+          ...state.currentCustomerData,
+          checkoutCart: toLoadedEntry([...currentItems, item]),
+        },
+      };
+    }),
+  removeCustomerCheckoutCartItem: (itemId) =>
+    set((state) => {
+      const currentItems = Array.isArray(state.currentCustomerData.checkoutCart.data)
+        ? state.currentCustomerData.checkoutCart.data
+        : [];
+
+      return {
+        currentCustomerData: {
+          ...state.currentCustomerData,
+          checkoutCart: toLoadedEntry(currentItems.filter((item) => item?.id !== itemId)),
+        },
+      };
+    }),
+  clearCustomerCheckoutCart: () =>
+    set((state) => ({
+      currentCustomerData: {
+        ...state.currentCustomerData,
+        checkoutCart: toLoadedEntry([]),
+      },
+    })),
   fetchCustomerActivePackageIfNeeded: async (email, { force = false } = {}) => {
     const normalizedEmail = normalizeEmail(email || get().activeCustomer?.email || '');
     const currentEntry = get().currentCustomerData.activePackage;

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { findProductByQrCode, getCustomerCheckoutCart, placeSwapCheckoutOrder } from '../../api/swapOpsApi';
+import { findProductByQrCode, placeSwapCheckoutOrder } from '../../api/swapOpsApi';
 import { Card } from '../../components/Card';
 import { CheckoutPaymentSelector } from '../../components/CheckoutPaymentSelector';
 import { ScreenShell } from '../../components/ScreenShell';
@@ -34,7 +34,7 @@ const normalizeCartItem = (item, index = 0) => ({
 
 export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => {
   const [customer, setCustomer] = useState(null);
-  const [cartItems, setCartItems] = useState([]);
+  const [localCartItems, setLocalCartItems] = useState([]);
   const [error, setError] = useState('');
   const [scanText, setScanText] = useState('');
   const [manualPoints, setManualPoints] = useState('');
@@ -45,11 +45,18 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
   const { withLoader } = useLoader();
   const buyPointsEmail = useAppSessionStore((state) => state.buyPointsEmail);
   const shopPointsSubscriptions = useSwapStore((state) => state.shopPointsSubscriptions);
+  const cartEntry = useSwapStore((state) => state.currentCustomerData.checkoutCart);
   const fetchShopPointsSubscriptions = useSwapStore((state) => state.fetchShopPointsSubscriptions);
   const invalidateCustomerCache = useSwapStore((state) => state.invalidateCustomerCache);
   const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
+  const fetchCustomerCheckoutCartIfNeeded = useSwapStore((state) => state.fetchCustomerCheckoutCartIfNeeded);
+  const setCustomerCheckoutCart = useSwapStore((state) => state.setCustomerCheckoutCart);
+  const addCustomerCheckoutCartItem = useSwapStore((state) => state.addCustomerCheckoutCartItem);
+  const removeCustomerCheckoutCartItem = useSwapStore((state) => state.removeCustomerCheckoutCartItem);
+  const clearCustomerCheckoutCart = useSwapStore((state) => state.clearCustomerCheckoutCart);
   const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
   const isCustomerMode = mode === 'customer';
+  const cartItems = isCustomerMode ? (Array.isArray(cartEntry.data) ? cartEntry.data : []) : localCartItems;
 
   useEffect(() => {
     let active = true;
@@ -59,14 +66,15 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
         setError('');
         if (!isCustomerMode) {
           setCustomer(null);
-          setCartItems([]);
+          setLocalCartItems([]);
           return;
         }
 
         const latestProfileEntry = useSwapStore.getState().currentCustomerData.profile;
+        const latestCheckoutCartEntry = useSwapStore.getState().currentCustomerData.checkoutCart;
         const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
-        const checkoutCartPromise = getCustomerCheckoutCart(customerEmail);
-        const [profile, checkoutCart] = canUseCache(latestProfileEntry)
+        const checkoutCartPromise = fetchCustomerCheckoutCartIfNeeded(customerEmail);
+        const [profile, checkoutCart] = canUseCache(latestProfileEntry) && canUseCache(latestCheckoutCartEntry)
           ? await Promise.all([profilePromise, checkoutCartPromise])
           : await withLoader(Promise.all([profilePromise, checkoutCartPromise]), 'Loading checkout...');
 
@@ -75,7 +83,15 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
         }
 
         setCustomer(profile);
-        setCartItems((checkoutCart || []).map((item, index) => normalizeCartItem(item, index)));
+        const normalizedCheckoutCart = (checkoutCart || []).map((item, index) => normalizeCartItem(item, index));
+        const existingCart = Array.isArray(latestCheckoutCartEntry?.data) ? latestCheckoutCartEntry.data : [];
+        const cartNeedsNormalization =
+          normalizedCheckoutCart.length !== existingCart.length ||
+          normalizedCheckoutCart.some((item, index) => existingCart[index]?.id !== item.id);
+
+        if (cartNeedsNormalization) {
+          setCustomerCheckoutCart(normalizedCheckoutCart);
+        }
       } catch (loadError) {
         if (active) {
           setError(loadError.message || 'Failed to load checkout data');
@@ -140,15 +156,20 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
         return;
       }
 
-      setCartItems((prev) => {
-        const productKey = product.unique_item_id_c || product.sku || product.id;
+      const productKey = product.unique_item_id_c || product.sku || product.id;
 
-        if (prev.some((item) => (item.unique_item_id_c || item.id) === productKey)) {
-          return prev;
-        }
+      if (cartItems.some((item) => (item.unique_item_id_c || item.id) === productKey)) {
+        setScanText('');
+        return;
+      }
 
-        return [...prev, normalizeCartItem(product, prev.length)];
-      });
+      const nextItem = normalizeCartItem(product, cartItems.length);
+      if (isCustomerMode) {
+        addCustomerCheckoutCartItem(nextItem);
+      } else {
+        setLocalCartItems((prev) => [...prev, nextItem]);
+      }
+
       setScanText('');
     } catch (scanError) {
       setError(scanError.message || 'Failed to scan product.');
@@ -164,23 +185,31 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
       return;
     }
 
-    setCartItems((prev) => [
-      ...prev,
-      normalizeCartItem(
-        {
-          id: `manual-${Date.now()}`,
-          name: 'Unlabelled item',
-          points: `${pointsValue} pts`,
-        },
-        prev.length
-      ),
-    ]);
+    const nextItem = normalizeCartItem(
+      {
+        id: `manual-${Date.now()}`,
+        name: 'Unlabelled item',
+        points: `${pointsValue} pts`,
+      },
+      cartItems.length
+    );
+
+    if (isCustomerMode) {
+      addCustomerCheckoutCartItem(nextItem);
+    } else {
+      setLocalCartItems((prev) => [...prev, nextItem]);
+    }
     setManualPoints('');
     setManualModalVisible(false);
   };
 
   const removeItem = (id) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== id));
+    if (isCustomerMode) {
+      removeCustomerCheckoutCartItem(id);
+      return;
+    }
+
+    setLocalCartItems((prev) => prev.filter((item) => item.id !== id));
   };
 
   const openPaymentModal = () => {
@@ -216,7 +245,11 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
       );
 
       invalidateCustomerCache(['orders', 'orderDetailsById', 'profile']);
-      setCartItems([]);
+      if (isCustomerMode) {
+        clearCustomerCheckoutCart();
+      } else {
+        setLocalCartItems([]);
+      }
       setPaymentModalVisible(false);
       setSelectedPaymentMethod('');
       setScanText('');
