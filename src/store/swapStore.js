@@ -916,14 +916,50 @@ export const useSwapStore = create((set, get) => ({
     }
   },
   fetchShopSubscriptions: async ({ force = false } = {}) => {
-    const [shopPointsSubscriptions, shopItemsSubscriptions] = await Promise.all([
-      get().fetchShopPointsSubscriptions({ force }),
-      get().fetchShopItemSubscriptions({ force }),
-    ]);
+    const shouldUsePointsCache = !force && (get().shopPointsSubscriptionsLoaded || get().shopPointsSubscriptionsLoading);
+    const shouldUseItemsCache = !force && (get().shopItemsSubscriptionsLoaded || get().shopItemsSubscriptionsLoading);
 
-    return {
-      shopPointsSubscriptions,
-      shopItemsSubscriptions,
-    };
+    if (shouldUsePointsCache && shouldUseItemsCache) {
+      return {
+        shopPointsSubscriptions: get().shopPointsSubscriptions,
+        shopItemsSubscriptions: get().shopItemsSubscriptions,
+      };
+    }
+
+    set({
+      shopPointsSubscriptionsLoading: shouldUsePointsCache ? get().shopPointsSubscriptionsLoading : true,
+      shopPointsSubscriptionsError: shouldUsePointsCache ? get().shopPointsSubscriptionsError : '',
+      shopItemsSubscriptionsLoading: shouldUseItemsCache ? get().shopItemsSubscriptionsLoading : true,
+      shopItemsSubscriptionsError: shouldUseItemsCache ? get().shopItemsSubscriptionsError : '',
+    });
+
+    try {
+      const [shopPointsSubscriptions, shopItemsSubscriptions] = await Promise.all([
+        shouldUsePointsCache ? Promise.resolve(get().shopPointsSubscriptions) : getShopPointsSubscriptions(),
+        shouldUseItemsCache ? Promise.resolve(get().shopItemsSubscriptions) : getShopItemSubscriptions(),
+      ]);
+
+      set({
+        shopPointsSubscriptions,
+        shopPointsSubscriptionsLoaded: true,
+        shopPointsSubscriptionsLoading: false,
+        shopItemsSubscriptions,
+        shopItemsSubscriptionsLoaded: true,
+        shopItemsSubscriptionsLoading: false,
+      });
+
+      return {
+        shopPointsSubscriptions,
+        shopItemsSubscriptions,
+      };
+    } catch (error) {
+      set({
+        shopPointsSubscriptionsLoading: false,
+        shopPointsSubscriptionsError: error?.message || 'Failed to fetch shop points subscriptions.',
+        shopItemsSubscriptionsLoading: false,
+        shopItemsSubscriptionsError: error?.message || 'Failed to fetch shop item subscriptions.',
+      });
+      throw error;
+    }
   },
 }));

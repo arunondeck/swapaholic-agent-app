@@ -53,6 +53,7 @@ import {
   getStoredBuyPointsToken,
   getStoredGuestToken,
   getStoredShopCustomerId,
+  getStoredOperatorToken,
   getStoredShopToken,
 } from '../store/appSessionStorage';
 import { buildCheckoutPointsSubscriptionPayload, getPointsSubscription } from '../services/checkoutPricingService';
@@ -80,6 +81,7 @@ const SWAP_ORDER_LIST_PATH = 'orders/list';
 const SWAP_ORDER_DETAIL_PATH = 'orders/detail';
 const EMPTY_ARRAY = [];
 const customerSessionCache = new Map();
+let guestTokenRequest = null;
 let boothProductsStore = mockBoothProducts.map((product) => ({ ...product }));
 let boothCheckoutsStore = mockBoothCheckouts.map((checkout) => ({
   ...checkout,
@@ -143,33 +145,45 @@ const persistAppSessionPatch = async (patch = {}) => {
   return nextSession;
 };
 
-const resolveGuestAuthToken = async () => {
+export const resolveGuestAuthToken = async () => {
   const storedGuestToken = getCachedStoredAppSession()?.guestToken || (await getStoredGuestToken());
   if (storedGuestToken) {
     return storedGuestToken;
   }
 
-  const guestSession = await registerGuestSession();
-  const guestToken = guestSession?.guestToken || guestSession?.token || '';
-  if (guestToken) {
-    await persistAppSessionPatch({ guestToken });
+  if (guestTokenRequest) {
+    return guestTokenRequest;
   }
-  return guestToken;
+
+  guestTokenRequest = (async () => {
+    const guestSession = await registerGuestSession();
+    const guestToken = guestSession?.guestToken || guestSession?.token || '';
+    if (guestToken) {
+      await persistAppSessionPatch({ guestToken });
+    }
+    return guestToken;
+  })();
+
+  try {
+    return await guestTokenRequest;
+  } finally {
+    guestTokenRequest = null;
+  }
 };
 
-const resolveAppUserAuthToken = async () => {
-  const storedAppUserToken = getCachedStoredAppSession()?.shopToken || (await getStoredShopToken());
-  if (storedAppUserToken) {
-    return storedAppUserToken;
+const resolveOperatorAuthToken = async () => {
+  const storedOperatorToken = getCachedStoredAppSession()?.operatorToken || (await getStoredOperatorToken());
+  if (storedOperatorToken) {
+    return storedOperatorToken;
   }
 
   const guestToken = await resolveGuestAuthToken();
-  const appUserSession = await loginAsShopUser(guestToken);
-  const appUserToken = appUserSession?.token || '';
-  if (appUserToken) {
-    await persistAppSessionPatch({ guestToken, shopToken: appUserToken });
+  const operatorSession = await loginAsShopUser(guestToken);
+  const operatorToken = operatorSession?.token || '';
+  if (operatorToken) {
+    await persistAppSessionPatch({ guestToken, operatorToken });
   }
-  return appUserToken;
+  return operatorToken;
 };
 
 const getCustomerItemsListData = (response) => {
@@ -643,7 +657,7 @@ const withSwapAuthHeader = async (headers = {}, authToken = '') => {
     return headers;
   }
 
-  const token = authToken || getCachedStoredAppSession()?.shopToken || (await getStoredShopToken());
+  const token = authToken || getCachedStoredAppSession()?.operatorToken || (await getStoredOperatorToken());
   return token ? { ...headers, Authorization: `Bearer ${token}` } : headers;
 };
 
@@ -2031,6 +2045,33 @@ export const getLatestPickupForSubscription = async (email, subscriptionId) => {
   return resolvedPickup;
 };
 
+export const loginAsSwapShopCustomer = async () => {
+  const swapShopEmail = (process.env.EXPO_PUBLIC_SWAP_EMAIL || '').trim().toLowerCase();
+  if (!swapShopEmail) {
+    throw new Error('EXPO_PUBLIC_SWAP_EMAIL is not configured.');
+  }
+
+  return loginAsCustomer(swapShopEmail);
+};
+
+export const loginAsBuyPointsCustomer = async () => {
+  const buyPointsEmail = (process.env.EXPO_PUBLIC_SWAP_BUY_POINTS_EMAIL || '').trim().toLowerCase();
+  if (!buyPointsEmail) {
+    throw new Error('EXPO_PUBLIC_SWAP_BUY_POINTS_EMAIL is not configured.');
+  }
+
+  return loginAsCustomer(buyPointsEmail);
+};
+
+export const loginAsBoothCustomer = async () => {
+  const boothEmail = (process.env.EXPO_PUBLIC_BOOTH_EMAIL || '').trim().toLowerCase();
+  if (!boothEmail) {
+    throw new Error('EXPO_PUBLIC_BOOTH_EMAIL is not configured.');
+  }
+
+  return loginAsCustomer(boothEmail);
+};
+
 /**
  * Get all pickups linked to a subscription.
  * @param {string} email
@@ -2135,12 +2176,18 @@ export const getAllSubscriptions = async () => {
 
 export const getShopPointsSubscriptions = async (authToken = '') => {
   const response = await getSubscriptionsList('SWAP.SUB.TYPE.POINTS.SHOP', authToken);
-  return getResponseData(response).subscriptions || EMPTY_ARRAY;
+  console.log('[swapApi] getShopPointsSubscriptions raw response', response);
+  const subscriptions = getResponseData(response).subscriptions || EMPTY_ARRAY;
+  console.log('[swapApi] getShopPointsSubscriptions resolved subscriptions', subscriptions);
+  return subscriptions;
 };
 
 export const getShopItemSubscriptions = async (authToken = '') => {
   const response = await getSubscriptionsList('SWAP.SUB.TYPE.ITEMS.SHOP', authToken);
-  return getResponseData(response).subscriptions || EMPTY_ARRAY;
+  console.log('[swapApi] getShopItemSubscriptions raw response', response);
+  const subscriptions = getResponseData(response).subscriptions || EMPTY_ARRAY;
+  console.log('[swapApi] getShopItemSubscriptions resolved subscriptions', subscriptions);
+  return subscriptions;
 };
 
 export const saveShopSubscription = async ({
@@ -2653,7 +2700,7 @@ export const getMaterials = async () => {
     return mockMaterials;
   }
 
-  const authToken = await resolveAppUserAuthToken();
+  const authToken = await resolveOperatorAuthToken();
   const materials = [];
   const seenMaterialIds = new Set();
   let nextOffset = DEFAULT_MATERIALS_LIST_PARAMS.offset;

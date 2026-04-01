@@ -8,6 +8,15 @@ const toCurrencyAmount = (value) => {
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
+const getSubscriptionUnitPrice = (subscription) => {
+  const price = toCurrencyAmount(subscription?.price_c);
+  if (price > 0) {
+    return price;
+  }
+
+  return toCurrencyAmount(subscription?.cost_c);
+};
+
 export const getPointsSubscription = (subscriptions = []) =>
   subscriptions.find(
     (subscription) =>
@@ -24,7 +33,7 @@ export const getItemsSubscription = (subscriptions = []) =>
 
 export const computeSubscriptionPayables = (subscription, noOfItems = 0) => {
   const normalizedItemCount = toWholeNumber(noOfItems);
-  const basePrice = toCurrencyAmount(subscription?.price_c);
+  const basePrice = getSubscriptionUnitPrice(subscription);
   const discountMatrix = Array.isArray(subscription?.discount_matrix_c) ? subscription.discount_matrix_c : [];
   let totalCost = 0;
   let peritemCost = 0;
@@ -87,8 +96,8 @@ export const buildCheckoutItemsSubscriptionPayload = (subscription, itemsToBuy =
       cost_c: Number(payables.totalCost.toFixed(2)),
       number_of_items_c: String(normalizedItemsToBuy),
       number_of_points_c: String(toWholeNumber(subscription?.number_of_points_c)),
-      number_of_accepted_items_c: 0,
-      number_of_rejected_items_c: 0,
+      number_of_accepted_items_c: '0',
+      number_of_rejected_items_c: '0',
     },
     totalCost: Number(payables.totalCost.toFixed(2)),
     peritemCost: Number(payables.peritemCost.toFixed(2)),

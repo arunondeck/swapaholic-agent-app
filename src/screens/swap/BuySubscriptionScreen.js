@@ -74,6 +74,7 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
     [itemCount, shopItemsSubscriptions]
   );
   const selectedSubscription = paymentSummary.selectedSubscription;
+  const payloadSubscription = paymentSummary.payableSubscription;
   const unitPrice = paymentSummary.perItemPayable;
   const calculatedPrice = paymentSummary.cashPayable;
 
@@ -86,7 +87,7 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
   }
 
   const openPaymentModal = () => {
-    if (!selectedSubscription) {
+    if (!selectedSubscription || !payloadSubscription) {
       setNotice('No subscription available to purchase.');
       return;
     }
@@ -102,7 +103,7 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
   };
 
   const handleBuy = async () => {
-    if (!selectedPaymentMethod || !selectedSubscription) {
+    if (!selectedPaymentMethod || !selectedSubscription || !payloadSubscription) {
       return;
     }
 
@@ -118,12 +119,14 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
       return;
     }
 
-    const payloadSubscription = {
-      ...paymentSummary.payableSubscription,
-    };
-
     try {
       setSubmitting(true);
+      console.log('[swap] buy flexi payload', {
+        itemCount,
+        paymentMode: selectedPaymentMethod,
+        srUserId,
+        subscription: payloadSubscription,
+      });
       await withLoader(
         saveShopSubscription({
           paymentMode: selectedPaymentMethod,
@@ -169,6 +172,10 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
           <Text style={styles.rowValue}>{itemCount}</Text>
         </View>
         <View style={styles.row}>
+          <Text style={styles.rowLabel}>Payload items</Text>
+          <Text style={styles.rowValue}>{payloadSubscription?.number_of_items_c || '0'}</Text>
+        </View>
+        <View style={styles.row}>
           <Text style={styles.rowLabel}>Total price</Text>
           <Text style={styles.rowValue}>${calculatedPrice.toFixed(2)}</Text>
         </View>
@@ -176,7 +183,11 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
 
       {!!notice && <Card title="Notice" subtitle={notice} />}
 
-      <TouchableOpacity onPress={openPaymentModal} style={styles.primaryButton}>
+      <TouchableOpacity
+        onPress={openPaymentModal}
+        style={[styles.primaryButton, (!selectedSubscription || !payloadSubscription) && styles.primaryButtonDisabled]}
+        disabled={!selectedSubscription || !payloadSubscription}
+      >
         <Text style={styles.primaryButtonText}>Make Payment</Text>
       </TouchableOpacity>
 

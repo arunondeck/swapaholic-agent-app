@@ -51,7 +51,9 @@ export default function App() {
   const hydrateAppSession = useAppSessionStore((state) => state.hydrate);
   const hydrated = useAppSessionStore((state) => state.hydrated);
   const checkingSession = useAppSessionStore((state) => state.checkingSession);
+  const shopToken = useAppSessionStore((state) => state.shopToken);
   const fetchReferenceDataIfNeeded = useSwapStore((state) => state.fetchReferenceDataIfNeeded);
+  const fetchShopSubscriptions = useSwapStore((state) => state.fetchShopSubscriptions);
 
   const current = stack[stack.length - 1];
   const push = (route, params = {}) => setStack((prev) => [...prev, { route, params }]);
@@ -74,7 +76,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated || checkingSession) {
+    if (!hydrated || checkingSession || !shopToken) {
       return;
     }
 
@@ -83,7 +85,13 @@ export default function App() {
         reason: error?.message || 'unknown error',
       });
     });
-  }, [checkingSession, fetchReferenceDataIfNeeded, hydrated]);
+
+    fetchShopSubscriptions().catch((error) => {
+      console.log('[swapStore] shop subscriptions preload failed', {
+        reason: error?.message || 'unknown error',
+      });
+    });
+  }, [checkingSession, fetchReferenceDataIfNeeded, fetchShopSubscriptions, hydrated, shopToken]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {

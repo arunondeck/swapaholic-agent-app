@@ -1,6 +1,15 @@
 import { create } from 'zustand';
-import { checkCustomerSession, checkShopUserSession, loginAsCustomer, loginAsShopUser, registerGuestSession } from '../api/swapOpsApi';
+import {
+  checkCustomerSession,
+  checkShopUserSession,
+  loginAsBoothCustomer,
+  loginAsBuyPointsCustomer,
+  loginAsShopUser,
+  loginAsSwapShopCustomer,
+  resolveGuestAuthToken,
+} from '../api/swapOpsApi';
 import { clearStoredAppSession, loadStoredAppSession, saveStoredAppSession } from './appSessionStorage';
+import { useSwapStore } from './swapStore';
 
 const SHOP_EMAIL = (process.env.EXPO_PUBLIC_SWAP_EMAIL || '').trim().toLowerCase();
 const BOOTH_EMAIL = (process.env.EXPO_PUBLIC_BOOTH_EMAIL || '').trim().toLowerCase();
@@ -9,17 +18,13 @@ const BUY_POINTS_EMAIL = (process.env.EXPO_PUBLIC_SWAP_BUY_POINTS_EMAIL || '').t
 const getCustomerIdFromSession = (session, fallbackCustomerId = '') =>
   session?.customer?.id || session?.user?.id || fallbackCustomerId || '';
 
-const resolveSessionForEmail = async (storedToken, storedCustomerId, email) => {
-  if (!email) {
-    throw new Error('Missing auth email configuration.');
-  }
-
+const resolveMimeCustomerSession = async (storedToken, storedCustomerId, loginFn, label) => {
   if (storedToken) {
     try {
-      console.log('[appSession] validating customer session', { email });
+      console.log('[appSession] validating customer session', { label });
       const session = await checkCustomerSession(storedToken);
       if (session?.token) {
-        console.log('[appSession] customer session valid', { email });
+        console.log('[appSession] customer session valid', { label });
         return {
           token: session.token,
           customerId: getCustomerIdFromSession(session, storedCustomerId),
@@ -27,20 +32,19 @@ const resolveSessionForEmail = async (storedToken, storedCustomerId, email) => {
       }
     } catch (error) {
       console.log('[appSession] customer session refresh required', {
-        email,
+        label,
         reason: error?.message || 'check failed',
       });
-      // Refresh the token with mime login when the saved token is invalid.
     }
   }
 
-  console.log('[appSession] obtaining fresh customer token', { email });
-  const loginResponse = await loginAsCustomer(email);
+  console.log('[appSession] obtaining fresh customer token', { label });
+  const loginResponse = await loginFn();
   const token = loginResponse?.token || '';
   const customerId = loginResponse?.customer?.id || '';
 
   if (!token) {
-    throw new Error(`Failed to get token for ${email}.`);
+    throw new Error(`Failed to get token for ${label}.`);
   }
 
   return {
@@ -81,6 +85,7 @@ export const useAppSessionStore = create((set, get) => ({
   hydrated: false,
   checkingSession: false,
   loading: false,
+  operatorToken: '',
   shopToken: '',
   boothToken: '',
   guestToken: '',
@@ -97,6 +102,7 @@ export const useAppSessionStore = create((set, get) => ({
 
     const stored = await loadStoredAppSession();
     console.log('[appSession] hydrate loaded storage', {
+      hasOperatorToken: Boolean(stored?.operatorToken || stored?.shopToken),
       hasShopToken: Boolean(stored?.shopToken),
       hasBoothToken: Boolean(stored?.boothToken),
       hasGuestToken: Boolean(stored?.guestToken),
@@ -106,6 +112,7 @@ export const useAppSessionStore = create((set, get) => ({
     set({
       hydrated: true,
       checkingSession: true,
+      operatorToken: stored?.operatorToken || stored?.shopToken || '',
       shopToken: stored?.shopToken || '',
       boothToken: stored?.boothToken || '',
       guestToken: stored?.guestToken || '',
@@ -133,41 +140,43 @@ export const useAppSessionStore = create((set, get) => ({
 
     try {
       console.log('[appSession] refreshTokens start');
-      const guestSession = await registerGuestSession();
+      const guestToken = await resolveGuestAuthToken();
       console.log('[appSession] guest session ready', {
-        hasGuestToken: Boolean(guestSession?.guestToken || guestSession?.token),
+        hasGuestToken: Boolean(guestToken),
       });
-      const guestToken = guestSession?.guestToken || guestSession?.token || '';
-      const shopSession = await resolveShopOperatorSession(get().shopToken, get().shopCustomerId, guestToken);
-      const shopAuth = {
-        shopToken: shopSession.token,
+      const operatorSession = await resolveShopOperatorSession(get().operatorToken, get().shopCustomerId, guestToken);
+      const operatorAuth = {
+        operatorToken: operatorSession.token,
         boothToken: get().boothToken,
         guestToken,
         buyPointsEmail: BUY_POINTS_EMAIL,
         buyPointsToken: get().buyPointsToken,
-        shopCustomerId: shopSession.customerId,
+        shopCustomerId: operatorSession.customerId,
         boothCustomerId: get().boothCustomerId,
         buyPointsCustomerId: get().buyPointsCustomerId,
+        shopToken: get().shopToken,
       };
-      await saveStoredAppSession(shopAuth);
+      await saveStoredAppSession(operatorAuth);
       set({
-        shopToken: shopAuth.shopToken,
-        guestToken: shopAuth.guestToken,
-        shopCustomerId: shopAuth.shopCustomerId,
+        operatorToken: operatorAuth.operatorToken,
+        guestToken: operatorAuth.guestToken,
+        shopCustomerId: operatorAuth.shopCustomerId,
       });
-      console.log('[appSession] shop token saved', {
-        shopToken: shopAuth.shopToken,
+      console.log('[appSession] operator token saved', {
+        operatorToken: operatorAuth.operatorToken,
       });
 
-      const [boothSession, buyPointsSession] = await Promise.all([
-        resolveSessionForEmail(get().boothToken, get().boothCustomerId, BOOTH_EMAIL),
+      const [shopSession, boothSession, buyPointsSession] = await Promise.all([
+        resolveMimeCustomerSession(get().shopToken, '', loginAsSwapShopCustomer, 'shop'),
+        resolveMimeCustomerSession(get().boothToken, get().boothCustomerId, loginAsBoothCustomer, 'booth'),
         BUY_POINTS_EMAIL
-          ? resolveSessionForEmail(get().buyPointsToken, get().buyPointsCustomerId, BUY_POINTS_EMAIL)
+          ? resolveMimeCustomerSession(get().buyPointsToken, get().buyPointsCustomerId, loginAsBuyPointsCustomer, 'buy-points')
           : Promise.resolve({ token: '', customerId: '' }),
       ]);
 
       const auth = {
-        ...shopAuth,
+        ...operatorAuth,
+        shopToken: shopSession.token,
         boothToken: boothSession.token,
         buyPointsToken: buyPointsSession.token,
         boothCustomerId: boothSession.customerId,
@@ -175,6 +184,7 @@ export const useAppSessionStore = create((set, get) => ({
       };
       await saveStoredAppSession(auth);
       console.log('[appSession] refreshTokens saved', {
+        hasOperatorToken: Boolean(auth.operatorToken),
         hasShopToken: Boolean(auth.shopToken),
         hasBoothToken: Boolean(auth.boothToken),
         hasGuestToken: Boolean(auth.guestToken),
@@ -184,6 +194,7 @@ export const useAppSessionStore = create((set, get) => ({
       set({
         hydrated: true,
         loading: false,
+        operatorToken: auth.operatorToken,
         shopToken: auth.shopToken,
         boothToken: auth.boothToken,
         guestToken: auth.guestToken,
@@ -195,11 +206,28 @@ export const useAppSessionStore = create((set, get) => ({
         error: '',
       });
 
+      console.log('[appSession] preloading shop subscriptions');
+      useSwapStore
+        .getState()
+        .fetchShopSubscriptions({ force: true })
+        .then((result) => {
+          console.log('[appSession] shop subscriptions preloaded', {
+            pointsCount: result?.shopPointsSubscriptions?.length || 0,
+            itemsCount: result?.shopItemsSubscriptions?.length || 0,
+          });
+        })
+        .catch((preloadError) => {
+          console.log('[appSession] shop subscriptions preload failed', {
+            reason: preloadError?.message || 'unknown error',
+          });
+        });
+
       return auth;
     } catch (error) {
       await clearStoredAppSession();
       set({
         loading: false,
+        operatorToken: '',
         shopToken: '',
         boothToken: '',
         guestToken: '',
@@ -216,6 +244,7 @@ export const useAppSessionStore = create((set, get) => ({
   clearTokens: async () => {
     await clearStoredAppSession();
     set({
+      operatorToken: '',
       shopToken: '',
       boothToken: '',
       guestToken: '',
