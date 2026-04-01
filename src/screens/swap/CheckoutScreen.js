@@ -37,9 +37,7 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
   const [cartItems, setCartItems] = useState([]);
   const [error, setError] = useState('');
   const [scanText, setScanText] = useState('');
-  const [manualName, setManualName] = useState('');
   const [manualPoints, setManualPoints] = useState('');
-  const [notice, setNotice] = useState('');
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [manualModalVisible, setManualModalVisible] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
@@ -49,7 +47,6 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
   const shopPointsSubscriptions = useSwapStore((state) => state.shopPointsSubscriptions);
   const fetchShopPointsSubscriptions = useSwapStore((state) => state.fetchShopPointsSubscriptions);
   const invalidateCustomerCache = useSwapStore((state) => state.invalidateCustomerCache);
-  const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
   const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
   const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
   const isCustomerMode = mode === 'customer';
@@ -109,7 +106,6 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
       }),
     [availablePoints, cartTotal, mode, shopPointsSubscriptions]
   );
-  const remainingPoints = Math.max(availablePoints - cartTotal, 0);
   const pointsToBuy = paymentSummary.pointsToBuy;
   const cashPayable = paymentSummary.cashPayable;
   const checkoutLookupEmail = customer?.email || customerEmail || buyPointsEmail || '';
@@ -119,7 +115,7 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
     : 'Scan items, add manual products, and purchase points for checkout';
   const headerTitle = customer?.name || (isCustomerMode ? 'Customer checkout' : 'Non-customer checkout');
   const headerSubtitle = isCustomerMode
-    ? `Available: ${availablePoints} pts | Remaining: ${remainingPoints} pts`
+    ? `Available: ${availablePoints} pts`
     : `Buy-points user: ${buyPointsEmail || 'Not configured'} | Points required: ${pointsToBuy} pts`;
 
   if (isCustomerMode && !customer) {
@@ -131,19 +127,16 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
   }
 
   const handleScan = async () => {
+    setError('');
     const code = scanText.trim();
     if (!code) {
-      setNotice('Please enter or scan a QR code first.');
       return;
     }
-
-    setNotice('');
 
     try {
       const product = await withLoader(findProductByQrCode(checkoutLookupEmail, code), 'Finding product...');
 
       if (!product) {
-        setNotice('Product not found.');
         return;
       }
 
@@ -151,30 +144,23 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
         const productKey = product.unique_item_id_c || product.sku || product.id;
 
         if (prev.some((item) => (item.unique_item_id_c || item.id) === productKey)) {
-          setNotice(`"${product.name}" is already in the cart.`);
           return prev;
         }
 
-        setNotice(`Added "${product.name}" to cart.`);
         return [...prev, normalizeCartItem(product, prev.length)];
       });
       setScanText('');
     } catch (scanError) {
-      setNotice(scanError.message || 'Failed to scan product.');
+      setError(scanError.message || 'Failed to scan product.');
     }
   };
 
   const handleManualAdd = () => {
-    const name = manualName.trim();
+    setError('');
     const pointsValue = parsePoints(manualPoints);
 
-    if (!name) {
-      setNotice('Enter a product name to add a manual item.');
-      return;
-    }
-
     if (pointsValue <= 0) {
-      setNotice('Enter valid points for the manual item.');
+      setError('Enter valid points for the manual item.');
       return;
     }
 
@@ -183,26 +169,22 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
       normalizeCartItem(
         {
           id: `manual-${Date.now()}`,
-          name,
+          name: 'Unlabelled item',
           points: `${pointsValue} pts`,
         },
         prev.length
       ),
     ]);
-    setManualName('');
     setManualPoints('');
     setManualModalVisible(false);
-    setNotice(`Added "${name}" to cart.`);
   };
 
   const removeItem = (id) => {
     setCartItems((prev) => prev.filter((item) => item.id !== id));
-    setNotice('Item removed from cart.');
   };
 
   const openPaymentModal = () => {
     if (cartItems.length === 0) {
-      setNotice('Add at least one product before placing the order.');
       return;
     }
 
@@ -217,7 +199,7 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
 
     try {
       setSubmitting(true);
-      const order = await withLoader(
+      await withLoader(
         placeSwapCheckoutOrder({
           mode,
           email: customer?.email || customerEmail || '',
@@ -238,11 +220,9 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
       setPaymentModalVisible(false);
       setSelectedPaymentMethod('');
       setScanText('');
-      setManualName('');
       setManualPoints('');
-      setNotice(`Order ${order.id} placed successfully.`);
     } catch (submitError) {
-      setNotice(submitError.message || 'Failed to place order.');
+      setError(submitError.message || 'Failed to place order.');
     } finally {
       setSubmitting(false);
     }
@@ -270,13 +250,12 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
 
       <TouchableOpacity
         onPress={() => {
-          setManualName('');
           setManualPoints('');
           setManualModalVisible(true);
         }}
         style={styles.secondaryButton}
       >
-        <Text style={styles.secondaryButtonText}>Add Product Manually</Text>
+        <Text style={styles.secondaryButtonText}>Unlabelled Item - Add Points</Text>
       </TouchableOpacity>
 
       <Card title="Cart" subtitle={`${cartItems.length} item${cartItems.length === 1 ? '' : 's'} in cart`} />
@@ -295,7 +274,6 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
         ))
       )}
 
-      {!!notice && <Card title="Notice" subtitle={notice} />}
       <View style={styles.formCard}>
         <Text style={styles.cardTitle}>Summary</Text>
         <View style={styles.row}>
@@ -310,10 +288,12 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
           <Text style={styles.rowLabel}>Available</Text>
           <Text style={styles.rowValue}>{isCustomerMode ? `${availablePoints} pts` : '0 pts'}</Text>
         </View>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>{isCustomerMode ? 'Remaining' : 'Points to Buy'}</Text>
-          <Text style={styles.rowValue}>{isCustomerMode ? `${remainingPoints} pts` : `${pointsToBuy} pts`}</Text>
-        </View>
+        {!isCustomerMode ? (
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Points to Buy</Text>
+            <Text style={styles.rowValue}>{`${pointsToBuy} pts`}</Text>
+          </View>
+        ) : null}
         {cashPayable > 0 ? (
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Cash Payable</Text>
@@ -346,19 +326,12 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
       <Modal transparent visible={manualModalVisible} animationType="fade" onRequestClose={() => setManualModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', justifyContent: 'center', padding: 20 }}>
           <View style={[styles.formCard, { gap: 14 }]}>
-            <Text style={styles.cardTitle}>Add Product Manually</Text>
-            <TextInput
-              value={manualName}
-              onChangeText={setManualName}
-              style={styles.input}
-              placeholder="Product name"
-              placeholderTextColor="#8b8b8b"
-            />
+            <Text style={styles.cardTitle}>Add Unlabelled Item</Text>
             <TextInput
               value={manualPoints}
               onChangeText={setManualPoints}
               style={styles.input}
-              placeholder="Points"
+              placeholder="Add points"
               placeholderTextColor="#8b8b8b"
               keyboardType="numeric"
             />
@@ -366,7 +339,6 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
               <TouchableOpacity
                 onPress={() => {
                   setManualModalVisible(false);
-                  setManualName('');
                   setManualPoints('');
                 }}
                 style={[styles.secondaryButton, { flex: 1 }]}
