@@ -50,7 +50,7 @@ export const getCachedStoredAppSession = () => appSessionCache;
 
 export const getStoredOperatorToken = async () => {
   const session = appSessionCache || (await loadStoredAppSession());
-  return session?.operatorToken || session?.shopToken || '';
+  return session?.operatorToken || '';
 };
 
 export const getStoredShopToken = async () => {

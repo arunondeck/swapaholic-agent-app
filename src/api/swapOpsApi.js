@@ -80,8 +80,28 @@ const SWAP_ORDER_CREATE_PATH = 'orders/save/shop';
 const SWAP_ORDER_LIST_PATH = 'orders/list';
 const SWAP_ORDER_DETAIL_PATH = 'orders/detail';
 const EMPTY_ARRAY = [];
+const TOKEN_SCOPE = Object.freeze({
+  GUEST: 'guest',
+  OPERATOR: 'operator',
+  SHOP: 'shop',
+  BOOTH: 'booth',
+  BUY_POINTS: 'buyPoints',
+});
+const CUSTOMER_TOKEN_SCOPE_PREFIX = 'customer:';
+const AUTH_ERROR_PATTERNS = [
+  'auth token',
+  'authorization',
+  'expired',
+  'forbidden',
+  'invalid session',
+  'invalid token',
+  'jwt',
+  'session expired',
+  'token invalid',
+  'unauthorized',
+];
 const customerSessionCache = new Map();
-let guestTokenRequest = null;
+const tokenRefreshRequests = new Map();
 let boothProductsStore = mockBoothProducts.map((product) => ({ ...product }));
 let boothCheckoutsStore = mockBoothCheckouts.map((checkout) => ({
   ...checkout,
@@ -145,45 +165,181 @@ const persistAppSessionPatch = async (patch = {}) => {
   return nextSession;
 };
 
-export const resolveGuestAuthToken = async () => {
-  const storedGuestToken = getCachedStoredAppSession()?.guestToken || (await getStoredGuestToken());
-  if (storedGuestToken) {
-    return storedGuestToken;
-  }
+const normalizeEmail = (value = '') => String(value || '').trim().toLowerCase();
 
-  if (guestTokenRequest) {
-    return guestTokenRequest;
-  }
+const createCustomerTokenScope = (email = '') => {
+  const normalizedEmail = normalizeEmail(email);
+  return normalizedEmail ? `${CUSTOMER_TOKEN_SCOPE_PREFIX}${normalizedEmail}` : '';
+};
 
-  guestTokenRequest = (async () => {
-    const guestSession = await registerGuestSession();
-    const guestToken = guestSession?.guestToken || guestSession?.token || '';
-    if (guestToken) {
-      await persistAppSessionPatch({ guestToken });
-    }
-    return guestToken;
-  })();
+const getCustomerEmailFromTokenScope = (tokenScope = '') =>
+  String(tokenScope || '').startsWith(CUSTOMER_TOKEN_SCOPE_PREFIX)
+    ? String(tokenScope).slice(CUSTOMER_TOKEN_SCOPE_PREFIX.length)
+    : '';
 
-  try {
-    return await guestTokenRequest;
-  } finally {
-    guestTokenRequest = null;
+const isAuthErrorMessage = (message = '') => {
+  const normalizedMessage = String(message || '').trim().toLowerCase();
+  return normalizedMessage ? AUTH_ERROR_PATTERNS.some((pattern) => normalizedMessage.includes(pattern)) : false;
+};
+
+const shouldRefreshTokenFromError = (error) =>
+  Boolean(
+    error?.invalidToken ||
+      error?.status === 401 ||
+      error?.status === 403 ||
+      isAuthErrorMessage(error?.message)
+  );
+
+const createAuthRequestError = (message, extras = {}) => {
+  const error = new Error(message);
+  Object.assign(error, extras);
+  return error;
+};
+
+const getStoredTokenForScope = async (tokenScope = '') => {
+  const cachedSession = getCachedStoredAppSession();
+
+  switch (tokenScope) {
+    case TOKEN_SCOPE.GUEST:
+      return cachedSession?.guestToken || (await getStoredGuestToken());
+    case TOKEN_SCOPE.OPERATOR:
+      return cachedSession?.operatorToken || (await getStoredOperatorToken());
+    case TOKEN_SCOPE.SHOP:
+      return cachedSession?.shopToken || (await getStoredShopToken());
+    case TOKEN_SCOPE.BUY_POINTS:
+      return cachedSession?.buyPointsToken || (await getStoredBuyPointsToken());
+    default:
+      return '';
   }
 };
 
-const resolveOperatorAuthToken = async () => {
-  const storedOperatorToken = getCachedStoredAppSession()?.operatorToken || (await getStoredOperatorToken());
-  if (storedOperatorToken) {
-    return storedOperatorToken;
+const refreshPersistedCustomerToken = async ({ loginFn, tokenKey, customerIdKey, extraPatch = {} } = {}) => {
+  const session = await loginFn();
+  const token = session?.token || '';
+  const customerId = session?.customer?.id || '';
+
+  if (!token) {
+    throw new Error(`Failed to refresh ${tokenKey}.`);
   }
 
-  const guestToken = await resolveGuestAuthToken();
-  const operatorSession = await loginAsShopUser(guestToken);
-  const operatorToken = operatorSession?.token || '';
-  if (operatorToken) {
-    await persistAppSessionPatch({ guestToken, operatorToken });
+  await persistAppSessionPatch({
+    ...extraPatch,
+    [tokenKey]: token,
+    ...(customerIdKey ? { [customerIdKey]: customerId } : {}),
+  });
+
+  return token;
+};
+
+const refreshAuthTokenForScope = async (tokenScope = '', { force = false } = {}) => {
+  if (!tokenScope) {
+    return '';
   }
-  return operatorToken;
+
+  if (!force) {
+    const storedToken = await getStoredTokenForScope(tokenScope);
+    if (storedToken) {
+      return storedToken;
+    }
+  }
+
+  if (tokenRefreshRequests.has(tokenScope)) {
+    return tokenRefreshRequests.get(tokenScope);
+  }
+
+  const refreshPromise = (async () => {
+    switch (tokenScope) {
+      case TOKEN_SCOPE.GUEST: {
+        const guestSession = await registerGuestSession();
+        const guestToken = guestSession?.guestToken || guestSession?.token || '';
+        if (guestToken) {
+          await persistAppSessionPatch({ guestToken });
+        }
+        return guestToken;
+      }
+      case TOKEN_SCOPE.OPERATOR: {
+        const guestToken = await refreshAuthTokenForScope(TOKEN_SCOPE.GUEST);
+        const operatorSession = await loginAsShopUser(guestToken);
+        const operatorToken = operatorSession?.token || '';
+        if (operatorToken) {
+          await persistAppSessionPatch({ guestToken, operatorToken });
+        }
+        return operatorToken;
+      }
+      case TOKEN_SCOPE.SHOP:
+        return refreshPersistedCustomerToken({
+          loginFn: loginAsSwapShopCustomer,
+          tokenKey: 'shopToken',
+        });
+      case TOKEN_SCOPE.BOOTH:
+        return refreshPersistedCustomerToken({
+          loginFn: loginAsBoothCustomer,
+          tokenKey: 'boothToken',
+          customerIdKey: 'boothCustomerId',
+        });
+      case TOKEN_SCOPE.BUY_POINTS: {
+        const buyPointsEmail = normalizeEmail(process.env.EXPO_PUBLIC_SWAP_BUY_POINTS_EMAIL);
+        return refreshPersistedCustomerToken({
+          loginFn: loginAsBuyPointsCustomer,
+          tokenKey: 'buyPointsToken',
+          customerIdKey: 'buyPointsCustomerId',
+          extraPatch: buyPointsEmail ? { buyPointsEmail } : {},
+        });
+      }
+      default: {
+        const customerEmail = getCustomerEmailFromTokenScope(tokenScope);
+        if (!customerEmail) {
+          return '';
+        }
+
+        const session = await authenticateCustomer(customerEmail, { forceRefresh: true });
+        return session?.loginResponse?.token || session?.token || '';
+      }
+    }
+  })();
+
+  tokenRefreshRequests.set(tokenScope, refreshPromise);
+
+  try {
+    return await refreshPromise;
+  } finally {
+    tokenRefreshRequests.delete(tokenScope);
+  }
+};
+
+const executeWithTokenRetry = async ({ tokenScope = '', authToken = '', callerName = 'unknown', request }) => {
+  const runRequest = async (currentToken, hasRetried = false) => {
+    try {
+      return await request(currentToken);
+    } catch (error) {
+      if (hasRetried || !tokenScope || !shouldRefreshTokenFromError(error)) {
+        throw error;
+      }
+
+      console.log('[swapApi] retrying request with refreshed token', {
+        callerName,
+        tokenScope,
+        reason: error?.message || 'auth failed',
+      });
+
+      const refreshedToken = await refreshAuthTokenForScope(tokenScope, { force: true });
+      if (!refreshedToken) {
+        throw error;
+      }
+
+      return runRequest(refreshedToken, true);
+    }
+  };
+
+  return runRequest(authToken, false);
+};
+
+export const resolveGuestAuthToken = async () => {
+  return refreshAuthTokenForScope(TOKEN_SCOPE.GUEST);
+};
+
+const resolveOperatorAuthToken = async () => {
+  return refreshAuthTokenForScope(TOKEN_SCOPE.OPERATOR);
 };
 
 const getCustomerItemsListData = (response) => {
@@ -664,7 +820,14 @@ const buildUrl = (path, withVersion = true) => {
 
 const buildWalletUrl = (path) => `${SWAP_WALLET_API_URL}/${path.replace(/^\//, '')}`;
 
-const withSwapAuthHeader = async (headers = {}, authToken = '') => {
+const withSwapAuthHeader = async (headers = {}, authToken = '', { forceAuthToken = false } = {}) => {
+  if (forceAuthToken && authToken) {
+    return {
+      ...headers,
+      Authorization: `Bearer ${authToken}`,
+    };
+  }
+
   if (headers.Authorization || headers.token) {
     return headers;
   }
@@ -710,62 +873,102 @@ const logApiResponse = ({ callerName = 'unknown', method, url, response, error }
  * @param {boolean} [withVersion=true]
  * @returns {Promise<Record<string, unknown>>}
  */
-const postJson = async (path, body, withVersion = true, extraHeaders = {}, authToken = '', callerName = 'unknown') => {
-  const headers = await withSwapAuthHeader({
-    'Content-Type': 'application/json',
-    ...extraHeaders,
-  }, authToken);
+const postJson = async (path, body, withVersion = true, extraHeaders = {}, authToken = '', callerName = 'unknown', tokenScope = '') => {
   const url = buildUrl(path, withVersion);
-  logApiRequest({
+
+  return executeWithTokenRetry({
+    tokenScope,
+    authToken,
     callerName,
-    method: 'POST',
-    url,
-    payload: body,
-    headers,
+    request: async (resolvedToken) => {
+      const headers = await withSwapAuthHeader(
+        {
+          'Content-Type': 'application/json',
+          ...extraHeaders,
+        },
+        resolvedToken,
+        { forceAuthToken: Boolean(tokenScope || authToken) }
+      );
+
+      logApiRequest({
+        callerName,
+        method: 'POST',
+        url,
+        payload: body,
+        headers,
+      });
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        const error = createAuthRequestError(`Swap API request failed (${response.status}): ${errorText}`, {
+          invalidToken: Boolean(tokenScope) && (response.status === 401 || response.status === 403 || isAuthErrorMessage(errorText)),
+          status: response.status,
+        });
+        logApiResponse({ callerName, method: 'POST', url, error });
+        throw error;
+      }
+
+      const data = await response.json();
+      if (tokenScope && response.ok && data?.status === false) {
+        const errorMessage = data?.error?.message || data?.success?.message || 'Authenticated request failed.';
+        if (isAuthErrorMessage(errorMessage)) {
+          const error = createAuthRequestError(errorMessage, {
+            invalidToken: true,
+            status: response.status,
+          });
+          logApiResponse({ callerName, method: 'POST', url, error });
+          throw error;
+        }
+      }
+
+      logApiResponse({ callerName, method: 'POST', url, response: data });
+      return data;
+    },
   });
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    const error = new Error(`Swap API request failed (${response.status}): ${errorText}`);
-    logApiResponse({ callerName, method: 'POST', url, error });
-    throw error;
-  }
-
-  const data = await response.json();
-  logApiResponse({ callerName, method: 'POST', url, response: data });
-  return data;
 };
 
-const getJson = async (url, headers = {}, authToken = '', callerName = 'unknown') => {
-  const requestHeaders = await withSwapAuthHeader(headers, authToken);
-  logApiRequest({
+const getJson = async (url, headers = {}, authToken = '', callerName = 'unknown', tokenScope = '') => {
+  return executeWithTokenRetry({
+    tokenScope,
+    authToken,
     callerName,
-    method: 'GET',
-    url,
-    payload: null,
-    headers: requestHeaders,
-  });
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: requestHeaders,
-  });
+    request: async (resolvedToken) => {
+      const requestHeaders = await withSwapAuthHeader(headers, resolvedToken, {
+        forceAuthToken: Boolean(tokenScope || authToken),
+      });
+      logApiRequest({
+        callerName,
+        method: 'GET',
+        url,
+        payload: null,
+        headers: requestHeaders,
+      });
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: requestHeaders,
+      });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    const error = new Error(`Swap API request failed (${response.status}): ${errorText}`);
-    logApiResponse({ callerName, method: 'GET', url, error });
-    throw error;
-  }
+      if (!response.ok) {
+        const errorText = await response.text();
+        const error = createAuthRequestError(`Swap API request failed (${response.status}): ${errorText}`, {
+          invalidToken: Boolean(tokenScope) && (response.status === 401 || response.status === 403 || isAuthErrorMessage(errorText)),
+          status: response.status,
+        });
+        logApiResponse({ callerName, method: 'GET', url, error });
+        throw error;
+      }
 
-  const data = await response.json();
-  logApiResponse({ callerName, method: 'GET', url, response: data });
-  return data;
+      const data = await response.json();
+      logApiResponse({ callerName, method: 'GET', url, response: data });
+      return data;
+    },
+  });
 };
 
 /**
@@ -824,32 +1027,45 @@ const assertSwapSuccess = (response) => {
  * @param {boolean} [withVersion=true]
  * @returns {Promise<Record<string, unknown>>}
  */
-const postFormData = async (path, formData, withVersion = true, authToken = '', callerName = 'unknown') => {
-  const headers = await withSwapAuthHeader({}, authToken);
+const postFormData = async (path, formData, withVersion = true, authToken = '', callerName = 'unknown', tokenScope = '') => {
   const url = buildUrl(path, withVersion);
-  logApiRequest({
+
+  return executeWithTokenRetry({
+    tokenScope,
+    authToken,
     callerName,
-    method: 'POST',
-    url,
-    payload: '[form-data]',
-    headers,
-  });
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: formData,
-  });
+    request: async (resolvedToken) => {
+      const headers = await withSwapAuthHeader({}, resolvedToken, {
+        forceAuthToken: Boolean(tokenScope || authToken),
+      });
+      logApiRequest({
+        callerName,
+        method: 'POST',
+        url,
+        payload: '[form-data]',
+        headers,
+      });
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    const error = new Error(`Swap API request failed (${response.status}): ${errorText}`);
-    logApiResponse({ callerName, method: 'POST', url, error });
-    throw error;
-  }
+      if (!response.ok) {
+        const errorText = await response.text();
+        const error = createAuthRequestError(`Swap API request failed (${response.status}): ${errorText}`, {
+          invalidToken: Boolean(tokenScope) && (response.status === 401 || response.status === 403 || isAuthErrorMessage(errorText)),
+          status: response.status,
+        });
+        logApiResponse({ callerName, method: 'POST', url, error });
+        throw error;
+      }
 
-  const data = await response.json();
-  logApiResponse({ callerName, method: 'POST', url, response: data });
-  return data;
+      const data = await response.json();
+      logApiResponse({ callerName, method: 'POST', url, response: data });
+      return data;
+    },
+  });
 };
 
 /**
@@ -983,9 +1199,10 @@ export const loginAppUser = async (email, password, authToken = '') => {
       tenancy: APP_LOGIN_TENANCY,
     },
     true,
-    authToken ? { Authorization: `Bearer ${authToken}` } : {},
-    '',
-    'loginAppUser'
+    {},
+    authToken,
+    'loginAppUser',
+    authToken ? TOKEN_SCOPE.GUEST : ''
   );
 
   const session = extractAuthSession(response);
@@ -1043,9 +1260,10 @@ export const loginAsShopUser = async (guestToken = '') => {
       password: DEFAULT_OPS_LOGIN_PASSWORD,
     },
     true,
-    resolvedGuestToken ? { Authorization: `Bearer ${resolvedGuestToken}` } : {},
-    '',
-    'loginAsShopUser'
+    {},
+    resolvedGuestToken,
+    'loginAsShopUser',
+    TOKEN_SCOPE.GUEST
   );
 
   const data = response?.success?.data || {};
@@ -1232,7 +1450,13 @@ export const getWalletBalances = async (token, email = '') => {
     };
   }
 
-  return getJson(buildWalletUrl('v1/wallet/get/balances'), token ? { Authorization: `Bearer ${token}` } : {}, '', 'getWalletBalances');
+  return getJson(
+    buildWalletUrl('v1/wallet/get/balances'),
+    {},
+    token,
+    'getWalletBalances',
+    token ? createCustomerTokenScope(email) : ''
+  );
 };
 
 const createCustomerSession = async (email) => {
@@ -1376,12 +1600,12 @@ const resolveSwapSrUserId = async () => {
   return srUserId;
 };
 
-const buyPointsForCheckout = async ({ requiredPoints, paymentMethod, authToken }) => {
+const buyPointsForCheckout = async ({ requiredPoints, paymentMethod, authToken, tokenScope = '' }) => {
   if (requiredPoints <= 0) {
     throw new Error('Required points must be greater than zero.');
   }
 
-  const subscriptions = await getShopPointsSubscriptions(authToken);
+  const subscriptions = await getShopPointsSubscriptions(authToken, tokenScope);
   const subscription = getPointsSubscription(subscriptions);
 
   if (!subscription?.id) {
@@ -1396,6 +1620,7 @@ const buyPointsForCheckout = async ({ requiredPoints, paymentMethod, authToken }
     srUserId,
     subscription: payableSubscription,
     authToken,
+    tokenScope,
   });
   assertSwapSuccess(response);
 
@@ -1426,8 +1651,8 @@ export const getCustomerOrders = async (email) => {
   }
 
   const session = await createCustomerSession(email);
+  const customerTokenScope = createCustomerTokenScope(session?.email || email);
   const customerId = session?.loginResponse?.customer?.id;
-  const customerToken = session?.loginResponse?.token || '';
   const authToken = session?.loginResponse?.token || '';
 
   if (!customerId) {
@@ -1450,7 +1675,8 @@ export const getCustomerOrders = async (email) => {
     true,
     {},
     authToken,
-    'getCustomerOrders'
+    'getCustomerOrders',
+    customerTokenScope
   );
 
   const orders = getResponseData(response).orders;
@@ -1471,6 +1697,7 @@ export const getCustomerOrderDetails = async (email, orderId) => {
   }
 
   const session = await createCustomerSession(email);
+  const customerTokenScope = createCustomerTokenScope(session?.email || email);
   const authToken = session?.loginResponse?.token || '';
 
   if (!authToken) {
@@ -1487,7 +1714,8 @@ export const getCustomerOrderDetails = async (email, orderId) => {
     true,
     {},
     authToken,
-    'getCustomerOrderDetails'
+    'getCustomerOrderDetails',
+    customerTokenScope
   );
 
   const order = getResponseData(response).order;
@@ -1508,7 +1736,7 @@ export const getCustomerOrderDetails = async (email, orderId) => {
  * @param {import('../types/swapTypes').SwapOrderCreateRequest} orderData
  * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<import('../types/swapTypes').SwapOrderCreateResponseData>>}
  */
-export const createSwapOrder = async (orderData, authToken = '') => {
+export const createSwapOrder = async (orderData, authToken = '', tokenScope = '') => {
   if (SWAP_USE_MOCK) {
     await delay();
 
@@ -1577,9 +1805,10 @@ export const createSwapOrder = async (orderData, authToken = '') => {
     SWAP_ORDER_CREATE_PATH,
     orderData,
     true,
-    authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    {},
     authToken,
-    'createSwapOrder'
+    'createSwapOrder',
+    tokenScope
   );
 };
 
@@ -1622,6 +1851,7 @@ export const placeSwapCheckoutOrder = async ({
   let resolvedEmail = email;
   let resolvedSubscribeId = subscribeId;
   let authToken = '';
+  let tokenScope = '';
   let availablePoints = 0;
 
   if (mode === 'customer') {
@@ -1629,6 +1859,7 @@ export const placeSwapCheckoutOrder = async ({
     const profile = session?.profile || null;
     resolvedEmail = session?.email || email;
     authToken = session?.loginResponse?.token || '';
+    tokenScope = createCustomerTokenScope(resolvedEmail);
     availablePoints = toPointsValue(profile?.points || profile?.total_available_points_c || '0');
 
     if (!resolvedSubscribeId) {
@@ -1641,6 +1872,7 @@ export const placeSwapCheckoutOrder = async ({
         requiredPoints: requiredTopUpPoints,
         paymentMethod,
         authToken,
+        tokenScope,
       });
       resolvedSubscribeId = purchase.subscribeId;
     }
@@ -1648,11 +1880,13 @@ export const placeSwapCheckoutOrder = async ({
     const buyPointsSession = await resolveBuyPointsSession();
     resolvedEmail = buyPointsSession.email;
     authToken = buyPointsSession.token;
+    tokenScope = TOKEN_SCOPE.BUY_POINTS;
 
     const purchase = await buyPointsForCheckout({
       requiredPoints: totalPoints,
       paymentMethod,
       authToken,
+      tokenScope,
     });
     resolvedSubscribeId = purchase.subscribeId;
   }
@@ -1671,7 +1905,8 @@ export const placeSwapCheckoutOrder = async ({
       })),
       customer_address: '.',
     },
-    authToken
+    authToken,
+    tokenScope
   );
 
   const data = assertSwapSuccess(response);
@@ -1711,6 +1946,7 @@ export const getCustomerSubscriptions = async (email) => {
   }
 
   const session = await createCustomerSession(email);
+  const customerTokenScope = createCustomerTokenScope(session?.email || email);
   const loginResponse = session?.loginResponse;
   const customerId = loginResponse?.customer?.id;
   const customerToken = loginResponse?.token || '';
@@ -1719,7 +1955,7 @@ export const getCustomerSubscriptions = async (email) => {
     return EMPTY_ARRAY;
   }
 
-  const response = await getCustomerSubscribesList({ customerId, authToken: customerToken });
+  const response = await getCustomerSubscribesList({ customerId, authToken: customerToken, tokenScope: customerTokenScope });
   return (getResponseData(response).subscribes || []).map(mapApiSubscribeToSubscription);
 };
 
@@ -1732,7 +1968,9 @@ export const getActiveCustomerSubscriptions = async (email) => {
   }
 
   const session = await createCustomerSession(email);
+  const customerTokenScope = createCustomerTokenScope(session?.email || email);
   const customerId = session?.loginResponse?.customer?.id;
+  const customerToken = session?.loginResponse?.token || '';
 
   if (!customerId) {
     return EMPTY_ARRAY;
@@ -1743,6 +1981,7 @@ export const getActiveCustomerSubscriptions = async (email) => {
     subscribeType: 'shop',
     ignoreNonPickupSubscribe: true,
     authToken: customerToken,
+    tokenScope: customerTokenScope,
   });
 
   return (getResponseData(response).subscribes || [])
@@ -1772,6 +2011,7 @@ export const getAllCustomerPickups = async (email) => {
 
   const normalizedEmail = String(email || '').trim().toLowerCase();
   const session = await createCustomerSession(normalizedEmail);
+  const customerTokenScope = createCustomerTokenScope(session?.email || normalizedEmail);
   const customerToken = session?.loginResponse?.token || '';
 
   if (!normalizedEmail || !customerToken) {
@@ -1790,7 +2030,8 @@ export const getAllCustomerPickups = async (email) => {
     true,
     {},
     customerToken,
-    'getCustomerPickups'
+    'getCustomerPickups',
+    customerTokenScope
   );
 
   const responseData = getResponseData(response);
@@ -1869,7 +2110,8 @@ const getAuthenticatedTaxonomyList = async ({
     true,
     {},
     guestToken,
-    callerName
+    callerName,
+    TOKEN_SCOPE.GUEST
   );
 
   return getResponseDataList(response, responseKey);
@@ -1888,6 +2130,7 @@ export const getCustomerSubscriptionDetails = async (email, subscriptionId) => {
   }
 
   const session = await createCustomerSession(email);
+  const customerTokenScope = createCustomerTokenScope(session?.email || email);
   const customerId = session?.loginResponse?.customer?.id;
   const customerToken = session?.loginResponse?.token || '';
 
@@ -1895,12 +2138,20 @@ export const getCustomerSubscriptionDetails = async (email, subscriptionId) => {
     return null;
   }
 
-  const response = await postJson('subscribes/get', {
-    tenancy: 'SWAP.SUBSCRIBE.GET.CUST_ID',
-    customer_id_c: customerId,
-    subscribe_type_c: 'shop',
-    subscribe_id_c: subscriptionId,
-  }, true, {}, customerToken, 'getCustomerSubscriptionDetails');
+  const response = await postJson(
+    'subscribes/get',
+    {
+      tenancy: 'SWAP.SUBSCRIBE.GET.CUST_ID',
+      customer_id_c: customerId,
+      subscribe_type_c: 'shop',
+      subscribe_id_c: subscriptionId,
+    },
+    true,
+    {},
+    customerToken,
+    'getCustomerSubscriptionDetails',
+    customerTokenScope
+  );
 
   const responseData = getResponseData(response);
   const primaryRecord = getResponsePrimaryRecord(response);
@@ -1967,6 +2218,7 @@ export const getCustomerPickupDetails = async (email, pickupId) => {
   }
 
   const session = await createCustomerSession(email);
+  const customerTokenScope = createCustomerTokenScope(session?.email || email);
   const customerToken = session?.loginResponse?.token || '';
 
   if (!pickupId) {
@@ -1983,7 +2235,8 @@ export const getCustomerPickupDetails = async (email, pickupId) => {
     true,
     {},
     customerToken,
-    'getCustomerPickupDetails'
+    'getCustomerPickupDetails',
+    customerTokenScope
   );
 
   const responseData = getResponseData(response);
@@ -2013,6 +2266,7 @@ export const getLatestPickupForSubscription = async (email, subscriptionId) => {
   }
 
   const session = await createCustomerSession(email);
+  const customerTokenScope = createCustomerTokenScope(session?.email || email);
   const customerToken = session?.loginResponse?.token || '';
 
   if (!subscriptionId || !customerToken) {
@@ -2027,7 +2281,8 @@ export const getLatestPickupForSubscription = async (email, subscriptionId) => {
     true,
     {},
     customerToken,
-    'getLatestPickupForSubscription'
+    'getLatestPickupForSubscription',
+    customerTokenScope
   );
 
   console.log('[swapApi] getLatestPickupForSubscription response', {
@@ -2107,6 +2362,7 @@ export const getPickupsForSubscription = async (email, subscriptionId) => {
   }
 
   const session = await createCustomerSession(email);
+  const customerTokenScope = createCustomerTokenScope(session?.email || email);
   const customerToken = session?.loginResponse?.token || '';
 
   if (!subscriptionId || !customerToken) {
@@ -2121,7 +2377,8 @@ export const getPickupsForSubscription = async (email, subscriptionId) => {
     true,
     {},
     customerToken,
-    'getPickupsForSubscription'
+    'getPickupsForSubscription',
+    customerTokenScope
   );
 
   const pickups = getResponseData(response).pickups || EMPTY_ARRAY;
@@ -2167,7 +2424,7 @@ export const reviewProduct = async ({ productId, action, notes = '', reviewedBy 
  * @param {import('../types/swapTypes').SwapSubscriptionTenancy} tenancy
  * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<Record<string, unknown>> | Record<string, unknown>>}
  */
-export const getSubscriptionsList = async (tenancy = 'SWAP.SUB.TYPE.ITEMS.STORE', authToken = '') => {
+export const getSubscriptionsList = async (tenancy = 'SWAP.SUB.TYPE.ITEMS.STORE', authToken = '', tokenScope = TOKEN_SCOPE.SHOP) => {
   if (SWAP_USE_MOCK) {
     await delay();
     return toMockSubscriptionListResponse(tenancy);
@@ -2177,7 +2434,7 @@ export const getSubscriptionsList = async (tenancy = 'SWAP.SUB.TYPE.ITEMS.STORE'
   if (!resolvedAuthToken) {
     throw new Error('Operator token is unavailable. Rehydrate app session to obtain and persist it.');
   }
-  return postJson('subscriptions/list', { tenancy }, true, {}, resolvedAuthToken, 'getSubscriptionsList');
+  return postJson('subscriptions/list', { tenancy }, true, {}, resolvedAuthToken, 'getSubscriptionsList', tokenScope);
 };
 
 export const getAllSubscriptions = async () => {
@@ -2195,16 +2452,16 @@ export const getAllSubscriptions = async () => {
   return Array.from(uniqueById.values());
 };
 
-export const getShopPointsSubscriptions = async (authToken = '') => {
-  const response = await getSubscriptionsList('SWAP.SUB.TYPE.POINTS.SHOP', authToken);
+export const getShopPointsSubscriptions = async (authToken = '', tokenScope = TOKEN_SCOPE.SHOP) => {
+  const response = await getSubscriptionsList('SWAP.SUB.TYPE.POINTS.SHOP', authToken, tokenScope);
   console.log('[swapApi] getShopPointsSubscriptions raw response', response);
   const subscriptions = getResponseData(response).subscriptions || EMPTY_ARRAY;
   console.log('[swapApi] getShopPointsSubscriptions resolved subscriptions', subscriptions);
   return subscriptions;
 };
 
-export const getShopItemSubscriptions = async (authToken = '') => {
-  const response = await getSubscriptionsList('SWAP.SUB.TYPE.ITEMS.SHOP', authToken);
+export const getShopItemSubscriptions = async (authToken = '', tokenScope = TOKEN_SCOPE.SHOP) => {
+  const response = await getSubscriptionsList('SWAP.SUB.TYPE.ITEMS.SHOP', authToken, tokenScope);
   console.log('[swapApi] getShopItemSubscriptions raw response', response);
   const subscriptions = getResponseData(response).subscriptions || EMPTY_ARRAY;
   console.log('[swapApi] getShopItemSubscriptions resolved subscriptions', subscriptions);
@@ -2216,6 +2473,7 @@ export const saveShopSubscription = async ({
   srUserId,
   subscription,
   authToken = '',
+  tokenScope = TOKEN_SCOPE.SHOP,
   addOns = EMPTY_ARRAY,
   type = 'SWAP.SUBSCRIBE.TYPE.SHOP',
   code = '',
@@ -2288,9 +2546,10 @@ export const saveShopSubscription = async ({
       path,
       payload,
       true,
-      authToken ? { Authorization: `Bearer ${authToken}` } : {},
+      {},
       authToken,
-      'saveShopSubscription'
+      'saveShopSubscription',
+      tokenScope
     );
     console.log('[swapApi] saveShopSubscription response', response);
     return response;
@@ -2316,6 +2575,7 @@ export const getCustomerSubscribesList = async ({
   subscribeType = 'shop',
   ignoreNonPickupSubscribe = false,
   authToken = '',
+  tokenScope = '',
 }) => {
   if (SWAP_USE_MOCK) {
     await delay();
@@ -2333,12 +2593,20 @@ export const getCustomerSubscribesList = async ({
     };
   }
 
-  return postJson('subscribes/list', {
-    tenancy: 'SWAP.SUBSCRIBE.GET.CUST_ID',
-    customer_id_c: customerId,
-    subscribe_type_c: subscribeType,
-    ignore_non_pickup_subscribe: ignoreNonPickupSubscribe,
-  }, true, {}, authToken, 'getCustomerSubscribesList');
+  return postJson(
+    'subscribes/list',
+    {
+      tenancy: 'SWAP.SUBSCRIBE.GET.CUST_ID',
+      customer_id_c: customerId,
+      subscribe_type_c: subscribeType,
+      ignore_non_pickup_subscribe: ignoreNonPickupSubscribe,
+    },
+    true,
+    {},
+    authToken,
+    'getCustomerSubscribesList',
+    tokenScope
+  );
 };
 
 /**
@@ -2352,16 +2620,24 @@ export const getCustomerDetails = async () => {
     return toMockCustomerDetailResponse();
   }
 
-  return postJson('customers/get', {
-    data_tenancy: 'SWAP.CUSTOMER.DATA_VIEW.DETAIL_PROTECTED',
-    detail_tenancy: 'SWAP.CUSTOMER.DETAIL_VIEW.TOKEN',
-    fetch_subscription: 'true',
-    fetch_pending_subscribe: 'true',
-    ignore_non_pickup_subscribe: 'true',
-    reset_cache: true,
-    fetch_wallets: true,
-    fetch_subscribe_list: true,
-  }, true, {}, '', 'getCustomerDetails');
+  return postJson(
+    'customers/get',
+    {
+      data_tenancy: 'SWAP.CUSTOMER.DATA_VIEW.DETAIL_PROTECTED',
+      detail_tenancy: 'SWAP.CUSTOMER.DETAIL_VIEW.TOKEN',
+      fetch_subscription: 'true',
+      fetch_pending_subscribe: 'true',
+      ignore_non_pickup_subscribe: 'true',
+      reset_cache: true,
+      fetch_wallets: true,
+      fetch_subscribe_list: true,
+    },
+    true,
+    {},
+    '',
+    'getCustomerDetails',
+    TOKEN_SCOPE.OPERATOR
+  );
 };
 
 /**
@@ -2402,7 +2678,8 @@ export const getItemsByPickup = async ({ pickupId, maxResults = 20, offset = 0, 
     false,
     {},
     '',
-    'getItemsByPickup'
+    'getItemsByPickup',
+    TOKEN_SCOPE.OPERATOR
   );
 };
 
@@ -2431,6 +2708,7 @@ export const getCustomerUnreviewedItems = async ({ maxResults = 21, offset = 0, 
   }
 
   const customerAuthToken = await resolveCustomerAuthToken(customerEmail, authToken);
+  const customerTokenScope = normalizeEmail(customerEmail) ? createCustomerTokenScope(customerEmail) : '';
   const response = await postJson(
     'customer-items/list',
     {
@@ -2445,7 +2723,8 @@ export const getCustomerUnreviewedItems = async ({ maxResults = 21, offset = 0, 
     true,
     {},
     customerAuthToken,
-    'getCustomerUnreviewedItems'
+    'getCustomerUnreviewedItems',
+    customerTokenScope
   );
 
   const data = getCustomerItemsListData(response);
@@ -2495,6 +2774,7 @@ export const reviewCustomerItem = async ({ id, status_c, customerEmail = '', aut
   }
 
   const customerAuthToken = await resolveCustomerAuthToken(customerEmail, authToken);
+  const customerTokenScope = normalizeEmail(customerEmail) ? createCustomerTokenScope(customerEmail) : '';
   return postJson(
     'v4/customer-items/review/item',
     {
@@ -2504,7 +2784,8 @@ export const reviewCustomerItem = async ({ id, status_c, customerEmail = '', aut
     false,
     {},
     customerAuthToken,
-    'reviewCustomerItem'
+    'reviewCustomerItem',
+    customerTokenScope
   );
 };
 
@@ -2540,7 +2821,7 @@ export const addItemToCustomerPickup = async ({ pickupId, thumbnailFile }) => {
   formData.append('pickup_id_c', pickupId);
   formData.append('thumbnail_c', thumbnailFile);
 
-  return postFormData('users/customer-items/init', formData, false, '', 'addItemToCustomerPickup');
+  return postFormData('users/customer-items/init', formData, false, '', 'addItemToCustomerPickup', TOKEN_SCOPE.OPERATOR);
 };
 
 export const updateCustomerPickupItem = async ({ id, item = {} } = {}) => {
@@ -2577,7 +2858,8 @@ export const updateCustomerPickupItem = async ({ id, item = {} } = {}) => {
     false,
     {},
     '',
-    'updateCustomerPickupItem'
+    'updateCustomerPickupItem',
+    TOKEN_SCOPE.OPERATOR
   );
 };
 
@@ -2672,6 +2954,7 @@ export const findProductByQrCode = async (email, scanText, authToken = '') => {
   }
 
   const customerAuthToken = await resolveCustomerAuthToken(email, authToken);
+  const customerTokenScope = normalizeEmail(email) ? createCustomerTokenScope(email) : '';
   const response = await postJson(
     'customer-items/get/item',
     {
@@ -2683,7 +2966,8 @@ export const findProductByQrCode = async (email, scanText, authToken = '') => {
     true,
     {},
     customerAuthToken,
-    'findProductByQrCode'
+    'findProductByQrCode',
+    customerTokenScope
   );
 
   if (response?.status === false) {
@@ -2765,7 +3049,8 @@ export const getMaterials = async () => {
       false,
       {},
       authToken,
-      'getMaterials'
+      'getMaterials',
+      TOKEN_SCOPE.OPERATOR
     );
 
     const pageMaterials = Array.isArray(response?.materials) ? response.materials : EMPTY_ARRAY;
@@ -2843,7 +3128,8 @@ export const getUserSegments = async () => {
     true,
     {},
     guestToken,
-    'getUserSegments'
+    'getUserSegments',
+    TOKEN_SCOPE.GUEST
   );
 
   return getResponseDataList(response, 'user_segments');

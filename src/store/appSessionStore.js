@@ -112,7 +112,7 @@ export const useAppSessionStore = create((set, get) => ({
     set({
       hydrated: true,
       checkingSession: true,
-      operatorToken: stored?.operatorToken || stored?.shopToken || '',
+      operatorToken: stored?.operatorToken || '',
       shopToken: stored?.shopToken || '',
       boothToken: stored?.boothToken || '',
       guestToken: stored?.guestToken || '',

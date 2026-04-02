@@ -1,8 +1,18 @@
 import { buildBoothProductCode } from '../utils/boothProductCode';
-import { getCachedStoredAppSession, getStoredBoothToken } from '../store/appSessionStorage';
+import {
+  getCachedStoredAppSession,
+  getStoredBoothToken,
+  loadStoredAppSession,
+  saveStoredAppSession,
+} from '../store/appSessionStorage';
 
 const BOOTH_GRAPHQL_URL = process.env.EXPO_PUBLIC_BOOTH_GRAPHQL_URL || '';
 const BOOTH_USE_MOCK = (process.env.EXPO_PUBLIC_BOOTH_USE_MOCK || process.env.EXPO_PUBLIC_SWAP_USE_MOCK || 'true').toLowerCase() === 'true';
+const SWAP_API_URL = (process.env.EXPO_PUBLIC_SWAP_API_URL || '').replace(/\/$/, '');
+const SWAP_API_VERSION = process.env.EXPO_PUBLIC_SWAP_API_VERSION || '';
+const BOOTH_EMAIL = (process.env.EXPO_PUBLIC_BOOTH_EMAIL || '').trim().toLowerCase();
+const BOOTH_AUTH_ERROR_PATTERNS = ['auth', 'expired', 'forbidden', 'invalid', 'jwt', 'token', 'unauthorized'];
+let boothTokenRefreshRequest = null;
 
 const SELLER_BOOTH_LIST_FRAGMENT = `
 fragment SellerBoothList on SellerBooth {
@@ -282,52 +292,137 @@ const logBoothResponse = ({ callerName = 'unknown', response, error }) => {
   });
 };
 
+const isBoothAuthErrorMessage = (message = '') => {
+  const normalizedMessage = String(message || '').trim().toLowerCase();
+  return normalizedMessage ? BOOTH_AUTH_ERROR_PATTERNS.some((pattern) => normalizedMessage.includes(pattern)) : false;
+};
+
+const persistBoothToken = async (boothToken = '') => {
+  const currentSession = getCachedStoredAppSession() || (await loadStoredAppSession()) || {};
+  await saveStoredAppSession({
+    ...currentSession,
+    boothToken,
+  });
+};
+
+const refreshBoothToken = async () => {
+  if (boothTokenRefreshRequest) {
+    return boothTokenRefreshRequest;
+  }
+
+  boothTokenRefreshRequest = (async () => {
+    if (!SWAP_API_URL || !SWAP_API_VERSION) {
+      throw new Error('Swap API configuration is required to refresh booth token.');
+    }
+
+    if (!BOOTH_EMAIL) {
+      throw new Error('EXPO_PUBLIC_BOOTH_EMAIL is required to refresh booth token.');
+    }
+
+    const response = await fetch(`${SWAP_API_URL}/${SWAP_API_VERSION}/yHncKdVLF2/customers/mime/login/email/3BCB2`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email_c: BOOTH_EMAIL }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    const token = payload?.success?.data?.token || payload?.token || '';
+
+    if (!response.ok || !token) {
+      const errorMessage = payload?.error?.message || payload?.message || `Booth token refresh failed (${response.status}).`;
+      throw new Error(errorMessage);
+    }
+
+    await persistBoothToken(token);
+    return token;
+  })();
+
+  try {
+    return await boothTokenRefreshRequest;
+  } finally {
+    boothTokenRefreshRequest = null;
+  }
+};
+
+const executeWithBoothTokenRetry = async (request, callerName = 'unknown') => {
+  const runRequest = async (token, hasRetried = false) => {
+    try {
+      return await request(token);
+    } catch (error) {
+      if (hasRetried || !(error?.status === 401 || error?.status === 403 || isBoothAuthErrorMessage(error?.message))) {
+        throw error;
+      }
+
+      console.log('[boothApi] retrying request with refreshed booth token', {
+        functionName: callerName,
+        reason: error?.message || 'auth failed',
+      });
+
+      const refreshedToken = await refreshBoothToken();
+      return runRequest(refreshedToken, true);
+    }
+  };
+
+  const storedToken = getCachedStoredAppSession()?.boothToken || (await getStoredBoothToken());
+  if (!storedToken) {
+    throw new Error('Booth token not available.');
+  }
+
+  return runRequest(storedToken, false);
+};
+
 const requestBoothGraphql = async (query, variables = {}, { requiresAuth = true, callerName = 'unknown' } = {}) => {
   if (!BOOTH_GRAPHQL_URL) {
     throw new Error('EXPO_PUBLIC_BOOTH_GRAPHQL_URL is required in .env when EXPO_PUBLIC_BOOTH_USE_MOCK is false.');
   }
 
-  const headers = {
-    'Content-Type': 'application/json',
-  };
+  const runRequest = async (token = '') => {
+    const headers = {
+      'Content-Type': 'application/json',
+    };
 
-  if (requiresAuth) {
-    const token = getCachedStoredAppSession()?.boothToken || (await getStoredBoothToken());
-    if (!token) {
-      throw new Error('Booth token not available.');
+    if (requiresAuth) {
+      headers.Authorization = `Bearer ${token}`;
     }
 
-    headers.Authorization = `Bearer ${token}`;
+    logBoothRequest({
+      callerName,
+      payload: { query, variables },
+      headers,
+    });
+
+    const response = await fetch(BOOTH_GRAPHQL_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query, variables }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      const error = new Error(`Booth GraphQL request failed (${response.status}): ${text}`);
+      error.status = response.status;
+      logBoothResponse({ callerName, error });
+      throw error;
+    }
+
+    const payload = await response.json();
+    if (payload.errors?.length) {
+      const error = new Error(payload.errors[0]?.message || 'Booth GraphQL request failed.');
+      logBoothResponse({ callerName, error });
+      throw error;
+    }
+
+    logBoothResponse({ callerName, response: payload.data });
+    return payload.data;
+  };
+
+  if (!requiresAuth) {
+    return runRequest('');
   }
 
-  logBoothRequest({
-    callerName,
-    payload: { query, variables },
-    headers,
-  });
-
-  const response = await fetch(BOOTH_GRAPHQL_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ query, variables }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    const error = new Error(`Booth GraphQL request failed (${response.status}): ${text}`);
-    logBoothResponse({ callerName, error });
-    throw error;
-  }
-
-  const payload = await response.json();
-  if (payload.errors?.length) {
-    const error = new Error(payload.errors[0]?.message || 'Booth GraphQL request failed.');
-    logBoothResponse({ callerName, error });
-    throw error;
-  }
-
-  logBoothResponse({ callerName, response: payload.data });
-  return payload.data;
+  return executeWithBoothTokenRetry(runRequest, callerName);
 };
 
 export const boothGraphqlConfig = {
