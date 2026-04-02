@@ -9,6 +9,7 @@ import { styles } from '../../styles/commonStyles';
 export const CustomerPortalScreen = ({ push, pop }) => {
   const activeCustomer = useSwapStore((state) => state.activeCustomer);
   const setActiveCustomerSession = useSwapStore((state) => state.setActiveCustomerSession);
+  const refreshCustomerSubscriptionState = useSwapStore((state) => state.refreshCustomerSubscriptionState);
   const [email, setEmail] = useState(activeCustomer?.email || 'arun.chembilath@gmail.com');
   const [error, setError] = useState('');
   const { withLoader } = useLoader();
@@ -25,6 +26,7 @@ export const CustomerPortalScreen = ({ push, pop }) => {
       setError('');
       const session = await withLoader(authenticateCustomer(normalizedEmail, { forceRefresh: true }), 'Logging in customer...');
       setActiveCustomerSession(session);
+      await withLoader(refreshCustomerSubscriptionState(normalizedEmail, { force: true }), 'Loading customer subscriptions...');
       push('customerOverview', { email: normalizedEmail });
     } catch (loginError) {
       setError(loginError.message || 'Customer login failed');

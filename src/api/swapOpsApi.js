@@ -90,6 +90,17 @@ const CUSTOMER_DETAILS_REQUEST = {
   fetch_wallets: true,
   fetch_subscribe_list: true,
 };
+const DEFAULT_PICKUP_TRIP_TIME = process.env.EXPO_PUBLIC_SWAP_PICKUP_TRIP_TIME || '';
+const DEFAULT_PICKUP_ADDRESS = {
+  apt_no_c: process.env.EXPO_PUBLIC_SWAP_PICKUP_APT_NO || '',
+  building_name_c: process.env.EXPO_PUBLIC_SWAP_PICKUP_BUILDING_NAME || '',
+  street_no_c: process.env.EXPO_PUBLIC_SWAP_PICKUP_STREET_NO || '',
+  street_name_c: process.env.EXPO_PUBLIC_SWAP_PICKUP_STREET_NAME || '',
+  country_c: process.env.EXPO_PUBLIC_SWAP_PICKUP_COUNTRY || '',
+  state_c: process.env.EXPO_PUBLIC_SWAP_PICKUP_STATE || '',
+  city_c: process.env.EXPO_PUBLIC_SWAP_PICKUP_CITY || '',
+  postal_code_c: process.env.EXPO_PUBLIC_SWAP_PICKUP_POSTAL_CODE || '',
+};
 const TOKEN_SCOPE = Object.freeze({
   GUEST: 'guest',
   OPERATOR: 'operator',
@@ -1541,8 +1552,13 @@ const getCheckoutSubscribeIdFromProfile = (profile) =>
 const extractCheckoutSubscribeId = (response) => {
   const data = getResponseData(response);
   return (
+    response?.subscribe_id ||
+    response?.subscription_id ||
+    response?.id ||
     data?.subscribe_id_c ||
+    data?.subscribe_id ||
     data?.subscription_id_c ||
+    data?.subscription_id ||
     data?.subscribe?.id ||
     data?.subscription?.id ||
     data?.id ||
@@ -1898,6 +1914,62 @@ export const createSwapOrder = async (orderData, authToken = '', tokenScope = ''
     'createSwapOrder',
     tokenScope
   );
+};
+
+const extractPickupId = (response) =>
+  response?.pickup_id ||
+  response?.id ||
+  getResponseData(response)?.pickup_id ||
+  getResponseData(response)?.pickup_id_c ||
+  getResponseData(response)?.pickup?.id ||
+  '';
+
+const formatPickupTripDate = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+  }).formatToParts(date);
+  const month = parts.find((part) => part.type === 'month')?.value || '';
+  const day = parts.find((part) => part.type === 'day')?.value || '';
+  const year = parts.find((part) => part.type === 'year')?.value || '';
+  return [month, day, year].filter(Boolean).join(' ');
+};
+
+const assertPickupConfig = () => {
+  const requiredKeys = ['apt_no_c', 'building_name_c', 'street_no_c', 'street_name_c', 'country_c', 'city_c', 'postal_code_c'];
+  const missingKey = requiredKeys.find((key) => !String(DEFAULT_PICKUP_ADDRESS[key] || '').trim());
+  if (missingKey) {
+    throw new Error(`Missing pickup address configuration: ${missingKey}`);
+  }
+  if (!String(DEFAULT_PICKUP_TRIP_TIME || '').trim()) {
+    throw new Error('Missing pickup time configuration: EXPO_PUBLIC_SWAP_PICKUP_TRIP_TIME');
+  }
+};
+
+const assertFlexiPlanPurchasePreflight = ({
+  srUserId = '',
+  paymentMode = '',
+  subscription = null,
+} = {}) => {
+  if (!srUserId) {
+    throw new Error('Missing sr_user_id for subscription purchase.');
+  }
+
+  const normalizedPaymentMode = String(paymentMode || '').toLowerCase();
+  if (!['cash', 'card', 'paynow'].includes(normalizedPaymentMode)) {
+    throw new Error('Invalid payment mode. Expected cash, card, or paynow.');
+  }
+
+  if (!subscription?.id) {
+    throw new Error('Missing subscription data for flexi plan purchase.');
+  }
+
+  if (!String(subscription?.number_of_items_c || '').trim()) {
+    throw new Error('Missing number_of_items_c for pickup creation.');
+  }
+
+  assertPickupConfig();
 };
 
 /**
@@ -2690,6 +2762,56 @@ export const updateCustomerSubscribe = async ({
   );
 };
 
+export const createCustomerPickup = async ({
+  customerEmail = '',
+  authToken = '',
+  subscribeId = '',
+  numberOfItems = '',
+  tripDate = new Date(),
+} = {}) => {
+  if (!subscribeId) {
+    throw new Error('Subscription id is required for pickup creation.');
+  }
+
+  assertPickupConfig();
+
+  const customerAuthToken = await resolveCustomerAuthToken(customerEmail, authToken);
+  const customerTokenScope = normalizeEmail(customerEmail) ? createCustomerTokenScope(customerEmail) : '';
+  const payload = {
+    trip_date_c: formatPickupTripDate(tripDate),
+    trip_time_c: DEFAULT_PICKUP_TRIP_TIME,
+    number_of_items_c: String(numberOfItems || '0'),
+    ...DEFAULT_PICKUP_ADDRESS,
+    subscribe_id_c: subscribeId,
+    type_c: 'dropoff',
+    origin_c: 'shop',
+    customer_address_id_c: null,
+    accepted_items_c: '0',
+    rejected_items_c: '0',
+  };
+
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return {
+      status: true,
+      message: 'Dropoff scheduled.',
+      pickup_id: `PICKUP-${Date.now()}`,
+      subscribe_id: subscribeId,
+      status_code: 200,
+    };
+  }
+
+  return postJson(
+    'v3/pickups/save',
+    payload,
+    false,
+    {},
+    customerAuthToken,
+    'createCustomerPickup',
+    customerTokenScope
+  );
+};
+
 /**
  * Get customer subscribes list using customer id returned by login API.
  * Endpoint: POST /{api_ver}/subscribes/list
@@ -2784,10 +2906,13 @@ export const purchaseFlexiPlan = async ({
   paymentMode = 'cash',
   subscription = null,
   activeSubscription = null,
+  onProgress,
 } = {}) => {
-  if (!subscription?.id) {
-    throw new Error('Missing subscription data for flexi plan purchase.');
-  }
+  assertFlexiPlanPurchasePreflight({
+    srUserId,
+    paymentMode,
+    subscription,
+  });
 
   const customerAuthToken = await resolveCustomerAuthToken(customerEmail, authToken);
   const customerTokenScope = normalizeEmail(customerEmail) ? createCustomerTokenScope(customerEmail) : '';
@@ -2805,6 +2930,7 @@ export const purchaseFlexiPlan = async ({
     assertSwapSuccess(updateResponse);
   }
 
+  onProgress?.('Buying flexi plan');
   const saveResponse = await saveShopSubscription({
     paymentMode,
     srUserId,
@@ -2817,6 +2943,20 @@ export const purchaseFlexiPlan = async ({
   const subscribeId = extractCheckoutSubscribeId(saveResponse);
   if (!subscribeId) {
     throw new Error('Subscription purchase response did not include a subscribe id.');
+  }
+
+  onProgress?.('Creating pickup');
+  const pickupResponse = await createCustomerPickup({
+    customerEmail,
+    authToken: customerAuthToken,
+    subscribeId,
+    numberOfItems: subscription?.number_of_items_c || '0',
+    tripDate: new Date(),
+  });
+  assertSwapSuccess(pickupResponse);
+  const pickupId = extractPickupId(pickupResponse);
+  if (!pickupId) {
+    throw new Error('Pickup creation response did not include a pickup id.');
   }
 
   let verification;
@@ -2844,7 +2984,9 @@ export const purchaseFlexiPlan = async ({
 
   return {
     subscribeId,
+    pickupId,
     saveResponse,
+    pickupResponse,
     verification,
     verified: verification.verified,
     message: verification.verified

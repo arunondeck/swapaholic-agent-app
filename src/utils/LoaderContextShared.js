@@ -39,6 +39,10 @@ export const LoaderProvider = ({ children }) => {
   const [pendingCount, setPendingCount] = useState(0);
   const [message, setMessage] = useState('');
 
+  const setLoaderMessage = useCallback((nextMessage = '') => {
+    setMessage(String(nextMessage || ''));
+  }, []);
+
   const showLoader = useCallback((nextMessage = '') => {
     setMessage(String(nextMessage || ''));
     setPendingCount((count) => count + 1);
@@ -70,10 +74,11 @@ export const LoaderProvider = ({ children }) => {
     () => ({
       hideLoader,
       isLoading: pendingCount > 0,
+      setLoaderMessage,
       showLoader,
       withLoader,
     }),
-    [hideLoader, pendingCount, showLoader, withLoader]
+    [hideLoader, pendingCount, setLoaderMessage, showLoader, withLoader]
   );
 
   return (

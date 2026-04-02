@@ -134,6 +134,7 @@ export default function App() {
           pop={pop}
           customerEmail={params?.email}
           subscriptionId={params?.subscriptionId}
+          backToOverview={params?.backToOverview}
         />
       ),
       customerPickups: (params) => <CustomerPickupsScreen push={push} pop={pop} customerEmail={params?.email} />,

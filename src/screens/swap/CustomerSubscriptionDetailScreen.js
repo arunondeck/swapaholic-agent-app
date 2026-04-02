@@ -16,18 +16,28 @@ import {
   getSubscriptionTypeLabel,
 } from '../../utils/subscriptionDisplay';
 
-export const CustomerSubscriptionDetailScreen = ({ pop, push, customerEmail, subscriptionId }) => {
+export const CustomerSubscriptionDetailScreen = ({ pop, push, customerEmail, subscriptionId, backToOverview = false }) => {
   const { withLoader } = useLoader();
   const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
+  const activePackageEntry = useSwapStore((state) => state.currentCustomerData.activePackage);
   const subscriptionsEntry = useSwapStore((state) => state.currentCustomerData.subscriptions);
+  const subscriptionDetailEntry = useSwapStore(
+    (state) => state.currentCustomerData.subscriptionDetailsById[String(subscriptionId || '')] || null
+  );
   const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
   const fetchCustomerSubscriptionsIfNeeded = useSwapStore((state) => state.fetchCustomerSubscriptionsIfNeeded);
+  const fetchCustomerSubscriptionDetailIfNeeded = useSwapStore((state) => state.fetchCustomerSubscriptionDetailIfNeeded);
   const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
   const customer = profileEntry.data;
+  const activeSubscription = activePackageEntry.data;
   /** @type {import('../../types/swapTypes').SwapSubscription[]} */
   const subscriptions = Array.isArray(subscriptionsEntry.data) ? subscriptionsEntry.data : [];
   /** @type {import('../../types/swapTypes').SwapSubscription | null} */
-  const subscription = subscriptions.find((entry) => String(entry?.id || '') === String(subscriptionId || '')) || null;
+  const subscription =
+    (String(activeSubscription?.id || '') === String(subscriptionId || '') ? activeSubscription : null) ||
+    subscriptionDetailEntry?.data ||
+    subscriptions.find((entry) => String(entry?.id || '') === String(subscriptionId || '')) ||
+    null;
   const error = profileEntry.error || subscriptionsEntry.error || '';
   /** @type {[import('../../types/swapTypes').SwapPickup[], Function]} */
   const [subscriptionPickups, setSubscriptionPickups] = useState([]);
@@ -37,15 +47,26 @@ export const CustomerSubscriptionDetailScreen = ({ pop, push, customerEmail, sub
       const state = useSwapStore.getState();
       const latestProfileEntry = state.currentCustomerData.profile;
       const latestSubscriptionsEntry = state.currentCustomerData.subscriptions;
+      const latestSubscriptionDetailEntry = state.currentCustomerData.subscriptionDetailsById[String(subscriptionId || '')] || null;
       const profilePromise = fetchCustomerProfileIfNeeded(customerEmail);
       const subscriptionsPromise = fetchCustomerSubscriptionsIfNeeded(customerEmail);
-      const hasUsableCache = canUseCache(latestProfileEntry) && canUseCache(latestSubscriptionsEntry);
+      const detailPromise = subscriptionId
+        ? fetchCustomerSubscriptionDetailIfNeeded(customerEmail, subscriptionId)
+        : Promise.resolve(null);
+      const hasUsableCache =
+        canUseCache(latestProfileEntry) &&
+        canUseCache(latestSubscriptionsEntry) &&
+        (
+          String(activeSubscription?.id || '') === String(subscriptionId || '') ||
+          !subscriptionId ||
+          canUseCache(latestSubscriptionDetailEntry)
+        );
 
       try {
         if (hasUsableCache) {
-          await Promise.all([profilePromise, subscriptionsPromise]);
+          await Promise.all([profilePromise, subscriptionsPromise, detailPromise]);
         } else {
-          await withLoader(Promise.all([profilePromise, subscriptionsPromise]), 'Loading subscription details...');
+          await withLoader(Promise.all([profilePromise, subscriptionsPromise, detailPromise]), 'Loading subscription details...');
         }
       } catch {
         // Store entries capture fetch errors for rendering.
@@ -53,7 +74,16 @@ export const CustomerSubscriptionDetailScreen = ({ pop, push, customerEmail, sub
     };
 
     loadData();
-  }, [canUseCache, customerEmail, fetchCustomerProfileIfNeeded, fetchCustomerSubscriptionsIfNeeded, withLoader]);
+  }, [
+    activeSubscription?.id,
+    canUseCache,
+    customerEmail,
+    fetchCustomerProfileIfNeeded,
+    fetchCustomerSubscriptionDetailIfNeeded,
+    fetchCustomerSubscriptionsIfNeeded,
+    subscriptionId,
+    withLoader,
+  ]);
 
   const displayId = subscription?.uniqueId || subscription?.id || 'NA';
   const subscriptionKind = getSubscriptionKind(subscription);
@@ -65,6 +95,13 @@ export const CustomerSubscriptionDetailScreen = ({ pop, push, customerEmail, sub
     : String(subscription?.acceptedItems || 0);
   const pickupItems = subscriptionPickups.flatMap((pickup) => (Array.isArray(pickup?.items) ? pickup.items : []));
   const remainingItems = getRemainingItemsCount(subscription?.numberOfItems || 0, pickupItems);
+  const handleBack = () => {
+    if (backToOverview) {
+      push('customerOverview', { email: customerEmail });
+      return;
+    }
+    pop();
+  };
 
   useEffect(() => {
     if (subscriptionKind !== 'flexi' || !subscription?.id) {
@@ -105,8 +142,8 @@ export const CustomerSubscriptionDetailScreen = ({ pop, push, customerEmail, sub
   }, [customerEmail, subscription?.id, subscriptionKind, withLoader]);
 
   if (!customer || !subscription) {
-    return (
-      <ScreenShell title="Subscription" subtitle={error || 'Loading subscription details...'} onBack={pop} backgroundColor="#ffe4e1">
+      return (
+      <ScreenShell title="Subscription" subtitle={error || 'Loading subscription details...'} onBack={handleBack} backgroundColor="#ffe4e1">
         <Text>{error || 'Loading...'}</Text>
       </ScreenShell>
     );
@@ -116,7 +153,7 @@ export const CustomerSubscriptionDetailScreen = ({ pop, push, customerEmail, sub
     <ScreenShell
       title={displayId}
       subtitle={`${customer.name} subscription details`}
-      onBack={pop}
+      onBack={handleBack}
       backgroundColor="#ffe4e1"
     >
       <View style={styles.listItem}>

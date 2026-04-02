@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import {
-  getActivePackageDetails,
   getAllSubscriptions,
   getBrands,
   getCustomerCheckoutCart,
@@ -134,6 +133,11 @@ const invalidateEntryMap = (map = {}) =>
 
 const getCustomerIdFromSession = (session) =>
   session?.loginResponse?.customer?.id || session?.profile?.id || session?.loginResponse?.user?.id || '';
+
+const resolveActiveSubscriptionFromList = (subscriptions = []) =>
+  Array.isArray(subscriptions)
+    ? subscriptions.find((subscription) => String(subscription?.status || '').trim().toLowerCase() === 'active') || null
+    : null;
 
 export const useSwapStore = create((set, get) => ({
   allSubscriptions: [],
@@ -473,6 +477,25 @@ export const useSwapStore = create((set, get) => ({
       return currentEntry.data;
     }
 
+    const result = await get().refreshCustomerSubscriptionState(normalizedEmail, { force });
+    return result?.activeSubscription || null;
+  },
+  refreshCustomerSubscriptionState: async (email, { force = false } = {}) => {
+    const normalizedEmail = normalizeEmail(email || get().activeCustomer?.email || '');
+    if (!normalizedEmail) {
+      set((state) => ({
+        currentCustomerData: {
+          ...state.currentCustomerData,
+          subscriptions: toLoadedEntry([]),
+          activePackage: toLoadedEntry(null),
+        },
+      }));
+      return {
+        subscriptions: [],
+        activeSubscription: null,
+      };
+    }
+
     set((state) => ({
       currentCustomerData: {
         ...state.currentCustomerData,
@@ -485,14 +508,37 @@ export const useSwapStore = create((set, get) => ({
     }));
 
     try {
-      const activePackage = await getActivePackageDetails(normalizedEmail);
+      const subscriptions = await get().fetchCustomerSubscriptionsIfNeeded(normalizedEmail, { force });
+      const activeSubscriptionSummary = resolveActiveSubscriptionFromList(subscriptions);
+
+      if (!activeSubscriptionSummary?.id) {
+        set((state) => ({
+          currentCustomerData: {
+            ...state.currentCustomerData,
+            activePackage: toLoadedEntry(null),
+          },
+        }));
+        return {
+          subscriptions: subscriptions || [],
+          activeSubscription: null,
+        };
+      }
+
+      const activePackage = await get().fetchCustomerSubscriptionDetailIfNeeded(
+        normalizedEmail,
+        activeSubscriptionSummary.id,
+        { force }
+      );
       set((state) => ({
         currentCustomerData: {
           ...state.currentCustomerData,
           activePackage: toLoadedEntry(activePackage),
         },
       }));
-      return activePackage;
+      return {
+        subscriptions: subscriptions || [],
+        activeSubscription: activePackage || null,
+      };
     } catch (error) {
       set((state) => ({
         currentCustomerData: {

@@ -42,25 +42,25 @@ const parseDateValue = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const getActivePackageDisplayName = (shopSubscribe, fallbackName = '') => {
-  const subscriptionName = String(shopSubscribe?.subscription?.name || shopSubscribe?.name || fallbackName || '').trim();
-  const normalizedSubscriptionName = subscriptionName.toLowerCase();
+const getActiveSubscriptionDisplayName = (subscription, fallbackName = '') => {
+  const planName = String(subscription?.plan || fallbackName || '').trim();
+  const normalizedPlanName = planName.toLowerCase();
+  const numberOfItems = Number.parseInt(String(subscription?.numberOfItems || 0), 10) || 0;
+  const numberOfPoints = Number.parseInt(String(subscription?.numberOfPoints || 0), 10) || 0;
 
-  if (!subscriptionName) {
+  if (!planName) {
     return fallbackName;
   }
 
-  if (normalizedSubscriptionName === 'buy points') {
-    const pointCount = Number.parseInt(String(shopSubscribe?.number_of_points_c || 0), 10) || 0;
-    return `${subscriptionName} ${pointCount} Points`;
+  if (normalizedPlanName === 'buy points') {
+    return `${planName} ${numberOfPoints} Points`;
   }
 
-  if (normalizedSubscriptionName === 'flexi swap shopper' || normalizedSubscriptionName === 'flexi swqap shoppepr') {
-    const itemCount = Number.parseInt(String(shopSubscribe?.number_of_items_c || 0), 10) || 0;
-    return `${subscriptionName} ${itemCount} Items`;
+  if (normalizedPlanName === 'flexi swap shopper' || normalizedPlanName === 'flexi swqap shoppepr') {
+    return `${planName} ${numberOfItems} Items`;
   }
 
-  return subscriptionName;
+  return planName;
 };
 
 const findLatestPickupForSubscription = (pickups, subscriptionId) => {
@@ -77,11 +77,11 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   const fetchShopSubscriptions = useSwapStore((state) => state.fetchShopSubscriptions);
   const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
   const activePackageEntry = useSwapStore((state) => state.currentCustomerData.activePackage);
+  const subscriptionsEntry = useSwapStore((state) => state.currentCustomerData.subscriptions);
   const pickupsEntry = useSwapStore((state) => state.currentCustomerData.pickups);
   const reviewCacheKey = buildCustomerUnreviewedItemsCacheKey({ maxResults: 21, offset: 0, filters: [] });
   const pendingReviewEntry = useSwapStore((state) => state.currentCustomerData.unreviewedItemsByKey[reviewCacheKey] || null);
   const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
-  const fetchCustomerActivePackageIfNeeded = useSwapStore((state) => state.fetchCustomerActivePackageIfNeeded);
   const fetchCustomerPickupsIfNeeded = useSwapStore((state) => state.fetchCustomerPickupsIfNeeded);
   const fetchCustomerUnreviewedItemsIfNeeded = useSwapStore((state) => state.fetchCustomerUnreviewedItemsIfNeeded);
   const primeCustomerPickupDetail = useSwapStore((state) => state.primeCustomerPickupDetail);
@@ -93,8 +93,9 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   const { withLoader } = useLoader();
   const customer = profileEntry.data;
   const activeSubscription = activePackageEntry.data;
+  const subscriptions = Array.isArray(subscriptionsEntry.data) ? subscriptionsEntry.data : [];
   const pickups = Array.isArray(pickupsEntry.data) ? pickupsEntry.data : [];
-  const error = profileEntry.error || activePackageEntry.error || pickupsEntry.error || pendingReviewEntry?.error || '';
+  const error = profileEntry.error || activePackageEntry.error || subscriptionsEntry.error || pickupsEntry.error || pendingReviewEntry?.error || '';
 
   useEffect(() => {
     fetchShopSubscriptions().catch(() => null);
@@ -104,11 +105,9 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
     const loadCustomer = async () => {
       const state = useSwapStore.getState();
       const latestProfileEntry = state.currentCustomerData.profile;
-      const latestActivePackageEntry = state.currentCustomerData.activePackage;
       const latestPickupsEntry = state.currentCustomerData.pickups;
       const latestPendingReviewEntry = state.currentCustomerData.unreviewedItemsByKey[reviewCacheKey] || null;
       const profilePromise = fetchCustomerProfileIfNeeded(activeEmail);
-      const activePackagePromise = fetchCustomerActivePackageIfNeeded(activeEmail);
       const pickupsPromise = fetchCustomerPickupsIfNeeded(activeEmail);
       const unreviewedPromise = fetchCustomerUnreviewedItemsIfNeeded({
         maxResults: 21,
@@ -118,13 +117,12 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
       });
       const hasUsableCache =
         canUseCache(latestProfileEntry) &&
-        canUseCache(latestActivePackageEntry) &&
         canUseCache(latestPickupsEntry) &&
         canUseCache(latestPendingReviewEntry);
 
       try {
-        const request = Promise.all([profilePromise, activePackagePromise, pickupsPromise, unreviewedPromise]);
-        const [, , , pendingReviewResponse] = hasUsableCache
+        const request = Promise.all([profilePromise, pickupsPromise, unreviewedPromise]);
+        const [, , pendingReviewResponse] = hasUsableCache
           ? await request
           : await withLoader(request, 'Loading customer...');
 
@@ -140,7 +138,6 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
     activeEmail,
     activeToken,
     canUseCache,
-    fetchCustomerActivePackageIfNeeded,
     fetchCustomerPickupsIfNeeded,
     fetchCustomerProfileIfNeeded,
     fetchCustomerUnreviewedItemsIfNeeded,
@@ -157,12 +154,20 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
     }
   }, [canUseCache, pendingReviewEntry]);
 
-  const shopSubscribe = customer?.customerSubscribe?.shop_subscribe || null;
+  const activeSubscriptionFallback =
+    subscriptions.find((entry) => String(entry?.status || '').trim().toLowerCase() === 'active') || null;
+  const currentSubscription = activeSubscription || activeSubscriptionFallback || null;
   const itemsSwappedInSummary = useMemo(() => {
-    const acceptedItems = Number.parseInt(String(shopSubscribe?.number_of_accepted_items_c || 0), 10) || 0;
-    const totalItems = Number.parseInt(String(shopSubscribe?.number_of_items_c || 0), 10) || 0;
+    const acceptedItems = Number.parseInt(
+      String(currentSubscription?.acceptedItems ?? 0),
+      10
+    ) || 0;
+    const totalItems = Number.parseInt(
+      String(currentSubscription?.numberOfItems ?? 0),
+      10
+    ) || 0;
     return `${acceptedItems}/${totalItems}`;
-  }, [shopSubscribe]);
+  }, [currentSubscription]);
 
   if (!customer) {
     return (
@@ -172,23 +177,28 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
     );
   }
 
-  const shopSubscribeExpiry = parseDateValue(shopSubscribe?.expiry_date_c);
+  const currentSubscriptionExpiry = parseDateValue(currentSubscription?.renewalDate);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const isShopSubscribeExpired = shopSubscribeExpiry ? shopSubscribeExpiry < today : false;
-  const hasActiveShopSubscribe = Boolean(shopSubscribe && !isShopSubscribeExpired);
-  const latestSubscriptionId = shopSubscribe?.id || activeSubscription?.id || '';
+  const isCurrentSubscriptionExpired = currentSubscriptionExpiry ? currentSubscriptionExpiry < today : false;
+  const hasActiveShopSubscribe =
+    Boolean(currentSubscription?.id) &&
+    !isCurrentSubscriptionExpired &&
+    String(currentSubscription?.status || '').trim().toLowerCase() === 'active';
+  const latestSubscriptionId = currentSubscription?.id || '';
   const linkedPickup = findLatestPickupForSubscription(pickups, latestSubscriptionId);
-  const displayedPackageName = getActivePackageDisplayName(shopSubscribe, customer.activePackage || activeSubscription?.plan || '');
+  const displayedPackageName = currentSubscription?.id
+    ? getActiveSubscriptionDisplayName(currentSubscription, customer.activePackage || '')
+    : customer.activePackage || 'NA';
   const latestSubscriptionKind = getSubscriptionKind({
-    plan: shopSubscribe?.subscription?.name || activeSubscription?.plan || '',
-    subscriptionType: shopSubscribe?.subscription?.type_c || '',
-    subscriptionSubType: shopSubscribe?.subscription?.sub_type_c || '',
+    plan: currentSubscription?.plan || '',
+    subscriptionType: currentSubscription?.subscriptionType || '',
+    subscriptionSubType: currentSubscription?.subscriptionSubType || '',
   });
-  const displayedPackageSubtitle = isShopSubscribeExpired
+  const displayedPackageSubtitle = isCurrentSubscriptionExpired
     ? 'Expired'
-    : hasActiveShopSubscribe && activeSubscription
-      ? `${activeSubscription.status} | Renews ${activeSubscription.renewalDate || 'NA'}`
+    : hasActiveShopSubscribe && currentSubscription
+      ? `${currentSubscription.status} | Renews ${currentSubscription.renewalDate || 'NA'}`
       : '';
   const canOpenLatestPackage = Boolean(displayedPackageName && latestSubscriptionId);
 
@@ -232,10 +242,10 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
                     return;
                   }
 
-                  if (activeSubscription?.id) {
+                  if (currentSubscription?.id) {
                     push('customerSubscriptionDetail', {
                       email: customer.email,
-                      subscriptionId: activeSubscription.id,
+                      subscriptionId: currentSubscription.id,
                     });
                   }
                 }
@@ -248,14 +258,14 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
             <Text
               style={[
                 styles.overviewTableValue,
-                isShopSubscribeExpired ? styles.overviewTableValueExpired : null,
+                isCurrentSubscriptionExpired ? styles.overviewTableValueExpired : null,
                 canOpenLatestPackage ? styles.overviewTableLinkValue : null,
               ]}
             >
               {displayedPackageName}
             </Text>
             {displayedPackageSubtitle ? (
-              <Text style={[styles.overviewTableHint, isShopSubscribeExpired ? styles.overviewTableHintExpired : null]}>
+              <Text style={[styles.overviewTableHint, isCurrentSubscriptionExpired ? styles.overviewTableHintExpired : null]}>
                 {displayedPackageSubtitle}
               </Text>
             ) : null}

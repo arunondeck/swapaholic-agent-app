@@ -30,16 +30,18 @@ export const BuySubscriptionScreen = ({ push, pop, customerEmail }) => {
   const [submitting, setSubmitting] = useState(false);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const [purchasedSubscriptionId, setPurchasedSubscriptionId] = useState('');
+  const [successItemCount, setSuccessItemCount] = useState('0');
   const redirectTimeoutRef = useRef(null);
-  const { withLoader } = useLoader();
+  const { setLoaderMessage, withLoader } = useLoader();
   const shopItemsSubscriptions = useSwapStore((state) => state.shopItemsSubscriptions);
   const fetchShopSubscriptions = useSwapStore((state) => state.fetchShopSubscriptions);
   const activeCustomer = useSwapStore((state) => state.activeCustomer);
   const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
-  const fetchCustomerActivePackageIfNeeded = useSwapStore((state) => state.fetchCustomerActivePackageIfNeeded);
+  const activePackageEntry = useSwapStore((state) => state.currentCustomerData.activePackage);
+  const subscriptionsEntry = useSwapStore((state) => state.currentCustomerData.subscriptions);
+  const fetchCustomerPickupsIfNeeded = useSwapStore((state) => state.fetchCustomerPickupsIfNeeded);
   const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
-  const fetchCustomerSubscriptionsIfNeeded = useSwapStore((state) => state.fetchCustomerSubscriptionsIfNeeded);
-  const invalidateCustomerCache = useSwapStore((state) => state.invalidateCustomerCache);
+  const refreshCustomerSubscriptionState = useSwapStore((state) => state.refreshCustomerSubscriptionState);
   const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
   const shopCustomerId = useAppSessionStore((state) => state.shopCustomerId);
   const customer = profileEntry.data;
@@ -83,7 +85,11 @@ export const BuySubscriptionScreen = ({ push, pop, customerEmail }) => {
   const payloadSubscription = paymentSummary.payableSubscription;
   const unitPrice = paymentSummary.perItemPayable;
   const calculatedPrice = paymentSummary.cashPayable;
-  const currentShopSubscription = customer?.customerSubscribe?.shop_subscribe || null;
+  const subscriptions = Array.isArray(subscriptionsEntry.data) ? subscriptionsEntry.data : [];
+  const currentShopSubscription =
+    activePackageEntry.data ||
+    subscriptions.find((entry) => String(entry?.status || '').trim().toLowerCase() === 'active') ||
+    null;
 
   useEffect(() => () => {
     if (redirectTimeoutRef.current) {
@@ -105,6 +111,7 @@ export const BuySubscriptionScreen = ({ push, pop, customerEmail }) => {
     push('customerSubscriptionDetail', {
       email: customerEmail,
       subscriptionId: purchasedSubscriptionId,
+      backToOverview: true,
     });
   };
 
@@ -166,19 +173,19 @@ export const BuySubscriptionScreen = ({ push, pop, customerEmail }) => {
           paymentMode: paymentMethod,
           subscription: payloadSubscription,
           activeSubscription: currentShopSubscription,
+          onProgress: setLoaderMessage,
         }),
         'Purchasing your flexi plan'
       );
 
-      invalidateCustomerCache(['profile', 'activePackage', 'subscriptions', 'subscriptionDetailsById']);
       await Promise.all([
-        fetchCustomerProfileIfNeeded(customerEmail, { force: true }),
-        fetchCustomerActivePackageIfNeeded(customerEmail, { force: true }),
-        fetchCustomerSubscriptionsIfNeeded(customerEmail, { force: true }),
+        refreshCustomerSubscriptionState(customerEmail, { force: true }),
+        fetchCustomerPickupsIfNeeded(customerEmail, { force: true }),
       ]);
       setSelectedPaymentMethod(paymentMethod);
-      setNotice(result?.message || 'Subscription purchased successfully.');
+      setNotice(`Flexi package of ${payloadSubscription?.number_of_items_c || itemCount} is purchased.`);
       setPurchasedSubscriptionId(result?.subscribeId || '');
+      setSuccessItemCount(String(payloadSubscription?.number_of_items_c || itemCount || '0'));
       setSuccessModalVisible(true);
       redirectTimeoutRef.current = setTimeout(() => {
         openPurchasedSubscription();
@@ -236,12 +243,15 @@ export const BuySubscriptionScreen = ({ push, pop, customerEmail }) => {
       <PaymentMethodModal
         visible={paymentModalVisible}
         paymentOptions={PAYMENT_OPTIONS}
+        selectedMode={selectedPaymentMethod}
         title="Select Payment Mode"
         helperText="Choose payment mode for this flexi plan purchase."
-        onSelectMode={(mode) => {
+        confirmLabel="Buy"
+        submitting={submitting}
+        onSelectMode={setSelectedPaymentMethod}
+        onConfirm={() => {
           setPaymentModalVisible(false);
-          setSelectedPaymentMethod(mode);
-          handleBuy(mode);
+          handleBuy(selectedPaymentMethod);
         }}
         onCancel={() => {
           setPaymentModalVisible(false);
@@ -253,7 +263,7 @@ export const BuySubscriptionScreen = ({ push, pop, customerEmail }) => {
         <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', justifyContent: 'center', padding: 20 }}>
           <View style={[styles.formCard, { gap: 14 }]}>
             <Text style={styles.cardTitle}>Flexi plan purchased</Text>
-            <Text style={styles.helperText}>Opening the new subscription details...</Text>
+            <Text style={styles.helperText}>{`Flexi package of ${successItemCount} is purchased.`}</Text>
             <TouchableOpacity onPress={openPurchasedSubscription} style={styles.primaryButton}>
               <Text style={styles.primaryButtonText}>OK</Text>
             </TouchableOpacity>
