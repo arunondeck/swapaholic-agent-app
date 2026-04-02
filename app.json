@@ -21,11 +21,31 @@
     },
     "android": {
       "package": "com.swapaholic.swapsquad",
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./src/images/app-icon.png",
         "backgroundColor": "#ffffff"
       }
     },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Swap Squad to take product photos."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Swap Squad to select product photos from your library.",
+          "cameraPermission": "Allow Swap Squad to take product photos."
+        }
+      ]
+    ],
     "web": {
       "favicon": "./src/images/app-icon.png"
     },
