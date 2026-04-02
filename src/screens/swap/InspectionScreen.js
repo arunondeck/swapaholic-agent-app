@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 import { getInspectionProducts } from '../../api/swapOpsApi';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 import { styles } from '../../styles/commonStyles';
 
 export const InspectionScreen = ({ pop }) => {

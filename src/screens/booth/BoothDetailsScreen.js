@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getBoothProductsByFilter, updateBoothProduct } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 import { generateBoothProductLabel, isBoothProductPrinted } from '../../services/boothPrintService';
 import { styles } from '../../styles/commonStyles';
 

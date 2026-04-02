@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getSellerBooths } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 import { styles } from '../../styles/commonStyles';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];

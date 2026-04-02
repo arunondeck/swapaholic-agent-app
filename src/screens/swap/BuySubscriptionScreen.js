@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { purchaseFlexiPlan } from '../../api/swapOpsApi';
 import { Card } from '../../components/Card';
+import { PaymentMethodModal } from '../../components/PaymentMethodModal';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 import { calculateBuyItemsPaymentSummary } from '../../services/checkoutPricingService';
 import { useAppSessionStore } from '../../store/appSessionStore';
 import { useSwapStore } from '../../store/swapStore';
@@ -20,13 +21,16 @@ const parseWholeNumber = (value) => {
   return Number.isNaN(parsed) ? 0 : Math.max(parsed, 0);
 };
 
-export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
+export const BuySubscriptionScreen = ({ push, pop, customerEmail }) => {
   const [itemCountInput, setItemCountInput] = useState('1');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [purchasedSubscriptionId, setPurchasedSubscriptionId] = useState('');
+  const redirectTimeoutRef = useRef(null);
   const { withLoader } = useLoader();
   const shopItemsSubscriptions = useSwapStore((state) => state.shopItemsSubscriptions);
   const fetchShopSubscriptions = useSwapStore((state) => state.fetchShopSubscriptions);
@@ -81,6 +85,29 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
   const calculatedPrice = paymentSummary.cashPayable;
   const currentShopSubscription = customer?.customerSubscribe?.shop_subscribe || null;
 
+  useEffect(() => () => {
+    if (redirectTimeoutRef.current) {
+      clearTimeout(redirectTimeoutRef.current);
+    }
+  }, []);
+
+  const openPurchasedSubscription = () => {
+    if (redirectTimeoutRef.current) {
+      clearTimeout(redirectTimeoutRef.current);
+      redirectTimeoutRef.current = null;
+    }
+
+    if (!purchasedSubscriptionId) {
+      return;
+    }
+
+    setSuccessModalVisible(false);
+    push('customerSubscriptionDetail', {
+      email: customerEmail,
+      subscriptionId: purchasedSubscriptionId,
+    });
+  };
+
   if (!customer) {
     return (
       <ScreenShell title="Buy Flexi Plan" subtitle={error || 'Loading subscription options...'} onBack={pop} backgroundColor="#ffe4e1">
@@ -105,8 +132,8 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
     setPaymentModalVisible(true);
   };
 
-  const handleBuy = async () => {
-    if (!selectedPaymentMethod || !selectedSubscription || !payloadSubscription) {
+  const handleBuy = async (paymentMethod = selectedPaymentMethod) => {
+    if (!paymentMethod || !selectedSubscription || !payloadSubscription) {
       return;
     }
 
@@ -126,7 +153,7 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
       setSubmitting(true);
       console.log('[swap] buy flexi payload', {
         itemCount,
-        paymentMode: selectedPaymentMethod,
+        paymentMode: paymentMethod,
         srUserId,
         activeSubscriptionId: currentShopSubscription?.id || '',
         subscription: payloadSubscription,
@@ -136,11 +163,11 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
           customerEmail,
           authToken: customerToken,
           srUserId,
-          paymentMode: selectedPaymentMethod,
+          paymentMode: paymentMethod,
           subscription: payloadSubscription,
           activeSubscription: currentShopSubscription,
         }),
-        'Saving subscription purchase...'
+        'Purchasing your flexi plan'
       );
 
       invalidateCustomerCache(['profile', 'activePackage', 'subscriptions', 'subscriptionDetailsById']);
@@ -149,9 +176,13 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
         fetchCustomerActivePackageIfNeeded(customerEmail, { force: true }),
         fetchCustomerSubscriptionsIfNeeded(customerEmail, { force: true }),
       ]);
-      setPaymentModalVisible(false);
-      setSelectedPaymentMethod('');
+      setSelectedPaymentMethod(paymentMethod);
       setNotice(result?.message || 'Subscription purchased successfully.');
+      setPurchasedSubscriptionId(result?.subscribeId || '');
+      setSuccessModalVisible(true);
+      redirectTimeoutRef.current = setTimeout(() => {
+        openPurchasedSubscription();
+      }, 2000);
     } catch (submitError) {
       setNotice(submitError.message || 'Failed to purchase subscription.');
     } finally {
@@ -202,42 +233,30 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
         <Text style={styles.primaryButtonText}>Make Payment</Text>
       </TouchableOpacity>
 
-      <Modal transparent visible={paymentModalVisible} animationType="fade" onRequestClose={() => setPaymentModalVisible(false)}>
+      <PaymentMethodModal
+        visible={paymentModalVisible}
+        paymentOptions={PAYMENT_OPTIONS}
+        title="Select Payment Mode"
+        helperText="Choose payment mode for this flexi plan purchase."
+        onSelectMode={(mode) => {
+          setPaymentModalVisible(false);
+          setSelectedPaymentMethod(mode);
+          handleBuy(mode);
+        }}
+        onCancel={() => {
+          setPaymentModalVisible(false);
+          setSelectedPaymentMethod('');
+        }}
+      />
+
+      <Modal transparent visible={successModalVisible} animationType="fade" onRequestClose={openPurchasedSubscription}>
         <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', justifyContent: 'center', padding: 20 }}>
           <View style={[styles.formCard, { gap: 14 }]}>
-            <Text style={styles.cardTitle}>Select Payment Mode</Text>
-            <Text style={styles.helperText}>Choose payment mode and continue to buy this subscription.</Text>
-            <View style={styles.chipRow}>
-              {PAYMENT_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option.id}
-                  onPress={() => setSelectedPaymentMethod(option.id)}
-                  style={[styles.chip, selectedPaymentMethod === option.id && styles.chipActive]}
-                >
-                  <Text style={styles.chipText}>{option.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.row}>
-              <TouchableOpacity
-                onPress={() => {
-                  setPaymentModalVisible(false);
-                  setSelectedPaymentMethod('');
-                }}
-                style={[styles.secondaryButton, { flex: 1 }]}
-                disabled={submitting}
-              >
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleBuy}
-                style={[styles.primaryButton, { flex: 1 }, (!selectedPaymentMethod || submitting) && styles.primaryButtonDisabled]}
-                disabled={!selectedPaymentMethod || submitting}
-              >
-                <Text style={styles.primaryButtonText}>{submitting ? 'Buying...' : 'Buy'}</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.cardTitle}>Flexi plan purchased</Text>
+            <Text style={styles.helperText}>Opening the new subscription details...</Text>
+            <TouchableOpacity onPress={openPurchasedSubscription} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>OK</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

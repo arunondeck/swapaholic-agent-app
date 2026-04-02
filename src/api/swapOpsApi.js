@@ -1022,9 +1022,17 @@ const createSwapErrorResponse = (code, message, data = { state_hash: null }) => 
  * @returns {T}
  */
 const assertSwapSuccess = (response) => {
-  if (response?.status === false) {
+  const normalizedStatus = String(response?.status ?? '').trim().toLowerCase();
+  const isFailureStatus = response?.status === false || normalizedStatus === 'failure' || normalizedStatus === 'error';
+  const isSuccessStatus =
+    response?.status === true ||
+    normalizedStatus === 'success' ||
+    normalizedStatus === '' ||
+    Boolean(response?.success);
+
+  if (isFailureStatus || !isSuccessStatus) {
     const error = getResponseError(response);
-    throw new Error(error?.message || 'Something went wrong');
+    throw new Error(error?.message || response?.message || response?.success?.message || 'Something went wrong');
   }
 
   return getResponseData(response);
@@ -2572,7 +2580,7 @@ export const saveShopSubscription = async ({
     throw new Error('Invalid payment mode. Expected cash, card, or paynow.');
   }
 
-  const path = `subscribes/save/shop/${normalizedPaymentMode}`;
+  const path = `v3/subscribes/save/shop/${normalizedPaymentMode}`;
   const payload = {
     sr_user_id: srUserId,
     subscription,
@@ -2625,7 +2633,7 @@ export const saveShopSubscription = async ({
     const response = await postJson(
       path,
       payload,
-      true,
+      false,
       {},
       authToken,
       'saveShopSubscription',
@@ -2669,12 +2677,12 @@ export const updateCustomerSubscribe = async ({
   }
 
   return postJson(
-    'subscribes/update',
+    'v3/subscribes/update',
     {
       subscribe_id: subscribeId,
       subscribe,
     },
-    true,
+    false,
     {},
     customerAuthToken,
     'updateCustomerSubscribe',

@@ -3,7 +3,7 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
 import { SwappedInItemsSection } from '../../components/SwappedInItemsSection';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 import { getRemainingItemsCount } from '../../utils/subscriptionMetrics';

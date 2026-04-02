@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BackHandler, Image, SafeAreaView, StatusBar, Text, View } from 'react-native';
 import appConfig from './app.json';
-import { LoaderProvider } from './src/context/LoaderContext';
+import { LoaderProvider } from './src/utils/LoaderContextShared';
 import { ScreenShell } from './src/components/ScreenShell';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { BoothAllCheckoutsScreen } from './src/screens/booth/BoothAllCheckoutsScreen';
@@ -153,7 +153,7 @@ export default function App() {
         <CustomerOrderDetailScreen pop={pop} customerEmail={params?.email} orderId={params?.orderId} />
       ),
       customerSwappedIn: (params) => <CustomerSwappedInScreen pop={pop} customerEmail={params?.email} />,
-      buySubscription: (params) => <BuySubscriptionScreen pop={pop} customerEmail={params?.email} />,
+      buySubscription: (params) => <BuySubscriptionScreen push={push} pop={pop} customerEmail={params?.email} />,
       ops: () => <OpsModeScreen push={push} pop={pop} />,
       opsSalesReports: () => <OpsSalesReportsScreen pop={pop} />,
       opsProducts: () => <OpsProductsScreen pop={pop} />,

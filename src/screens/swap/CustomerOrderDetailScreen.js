@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 import { SwapProductCard } from '../../components/SwapProductCard';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 

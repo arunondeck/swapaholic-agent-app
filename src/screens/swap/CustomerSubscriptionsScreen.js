@@ -3,7 +3,7 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import { formatRemainingItems } from '../../api/swapOpsApi';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 import { formatSubscriptionDate, getSubscriptionKind, getSubscriptionStatusDisplay } from '../../utils/subscriptionDisplay';

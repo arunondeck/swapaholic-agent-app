@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import { getBoothCheckout } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 import { styles } from '../../styles/commonStyles';
 
 export const BoothCheckoutDetailScreen = ({ pop, push, checkoutId }) => {

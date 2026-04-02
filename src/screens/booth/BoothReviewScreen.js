@@ -3,7 +3,7 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import { getBoothProducts } from '../../api/swapOpsApi';
 import { ProductCard } from '../../components/ProductCard';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 import { styles } from '../../styles/commonStyles';
 
 export const BoothReviewScreen = ({ pop }) => {

@@ -3,7 +3,7 @@ import { Alert, Text, TouchableOpacity, View } from 'react-native';
 import { getCustomerUnreviewedItems, reviewCustomerItem } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
 import { SwapProductItemWithActions } from '../../components/SwapProductItemWithActions';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 import { buildCustomerUnreviewedItemsCacheKey, useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 

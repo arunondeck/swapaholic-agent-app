@@ -5,7 +5,7 @@ import { Card } from '../../components/Card';
 import { CheckoutPaymentSelector } from '../../components/CheckoutPaymentSelector';
 import { ScreenShell } from '../../components/ScreenShell';
 import { SwapProductItemWithActions } from '../../components/SwapProductItemWithActions';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 import { useAppSessionStore } from '../../store/appSessionStore';
 import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';

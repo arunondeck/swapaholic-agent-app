@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { getLatestPickupForSubscription } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 import { buildCustomerUnreviewedItemsCacheKey, useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 import { getSubscriptionKind } from '../../utils/subscriptionDisplay';

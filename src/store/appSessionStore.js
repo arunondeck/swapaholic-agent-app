@@ -58,13 +58,14 @@ const resolveShopOperatorSession = async (storedToken = '', storedCustomerId = '
     try {
       console.log('[appSession] validating operator session');
       const session = await checkShopUserSession(storedToken);
-      if (session?.token) {
+      if (session?.token && storedCustomerId) {
         console.log('[appSession] operator session valid');
         return {
           token: session.token,
           customerId: storedCustomerId,
         };
       }
+      console.log('[appSession] operator session missing stored user id, refreshing login');
     } catch (error) {
       console.log('[appSession] operator session refresh required', {
         reason: error?.message || 'check failed',
@@ -77,7 +78,7 @@ const resolveShopOperatorSession = async (storedToken = '', storedCustomerId = '
   const session = await loginAsShopUser(guestToken);
   return {
     token: session?.token || '',
-    customerId: storedCustomerId,
+    customerId: session?.user?.id || session?.response?.success?.data?.user_id || storedCustomerId,
   };
 };
 

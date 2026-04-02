@@ -3,7 +3,7 @@ import { Text } from 'react-native';
 import { getBoothProducts } from '../../api/swapOpsApi';
 import { Card } from '../../components/Card';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 
 export const BoothTagsScreen = ({ pop }) => {
   const [products, setProducts] = useState([]);

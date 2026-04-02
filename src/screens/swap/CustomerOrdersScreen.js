@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Text, TouchableOpacity } from 'react-native';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 

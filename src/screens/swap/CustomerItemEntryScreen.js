@@ -3,7 +3,7 @@ import { Alert, Image, Text, TextInput, TouchableOpacity, View } from 'react-nat
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { createCustomerPickupItem } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from '../../utils/LoaderContextShared';
 import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 
