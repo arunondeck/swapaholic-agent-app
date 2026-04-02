@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useCameraPermissions } from 'expo-camera';
 import { createBoothCheckout, getBoothPaymentMethods, getBoothProductById } from '../../api/swapOpsApi';
+import { CameraScanner } from '../../components/CameraScanner';
 import { ScreenShell } from '../../components/ScreenShell';
+import { getItemIdFromScan } from '../../services/cameraScannerService';
 import { styles } from '../../styles/commonStyles';
-
-const BARCODE_TYPES = ['qr', 'code128', 'code39', 'code93', 'codabar'];
+import { extractBoothProductIdFromCode } from '../../utils/boothProductCode';
 
 export const BoothCheckoutScreen = ({ pop, push }) => {
   const [productCode, setProductCode] = useState('');
@@ -105,22 +106,23 @@ export const BoothCheckoutScreen = ({ pop, push }) => {
     setScannerOpen(true);
   };
 
-  const onBarcodeScanned = async ({ data }) => {
+  const onBarcodeScanned = async (scanResult) => {
+    const itemId = getItemIdFromScan(scanResult, [extractBoothProductIdFromCode]);
     const now = Date.now();
-    if (!scannerReady) {
+    if (!scannerReady || !itemId) {
       return;
     }
 
-    if (lastScannedRef.current.value === data && now - lastScannedRef.current.at < 1200) {
+    if (lastScannedRef.current.value === itemId && now - lastScannedRef.current.at < 1200) {
       return;
     }
 
-    lastScannedRef.current = { value: data, at: now };
+    lastScannedRef.current = { value: itemId, at: now };
     setScannerReady(false);
     setBusy(true);
 
     try {
-      const success = await resolveProduct(data);
+      const success = await resolveProduct(itemId);
       if (success) {
         setScannerOpen(false);
         Alert.alert('Product Added', 'The scanned product has been added to the cart.');
@@ -194,21 +196,12 @@ export const BoothCheckoutScreen = ({ pop, push }) => {
           </View>
 
         {scannerOpen ? (
-          <View style={styles.scannerCard}>
-              <Text style={styles.cardTitle}>Barcode Scanner</Text>
-              <Text style={styles.helperText}>Point the camera at a booth QR or barcode.</Text>
-              <View style={styles.cameraFrame}>
-                <CameraView
-                  style={styles.cameraPreview}
-                  barcodeScannerSettings={{ barcodeTypes: BARCODE_TYPES }}
-                  onBarcodeScanned={scannerReady ? onBarcodeScanned : undefined}
-                  facing="back"
-                />
-              </View>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => setScannerOpen(false)}>
-                <Text style={styles.secondaryButtonText}>Close Scanner</Text>
-              </TouchableOpacity>
-          </View>
+          <CameraScanner
+            onBarcodeScanned={onBarcodeScanned}
+            onClose={() => setScannerOpen(false)}
+            scannerReady={scannerReady}
+            helperText="Point the camera at a booth QR or barcode."
+          />
         ) : null}
 
         <View style={styles.summaryCard}>
