@@ -263,22 +263,34 @@ const formatBoothProduct = (product) => ({
   price: `$${Number(product.listing_price || 0).toFixed(2)}`,
 });
 
+const getGraphqlOperationName = (query = '') => {
+  const normalized = String(query || '').replace(/\s+/g, ' ').trim();
+  const match = normalized.match(/(?:query|mutation)\s+([A-Za-z0-9_]+)/);
+  return match?.[1] || 'anonymous';
+};
+
 const logBoothRequest = ({ callerName = 'unknown', payload, headers }) => {
+  const operationName = getGraphqlOperationName(payload?.query);
   console.log('[boothApi] request', {
     functionName: callerName,
+    api: operationName,
     method: 'POST',
     url: BOOTH_GRAPHQL_URL,
-    payload,
+    params: payload?.variables || {},
     hasAuth: Boolean(headers?.Authorization),
   });
 };
 
-const logBoothResponse = ({ callerName = 'unknown', response, error }) => {
+const logBoothResponse = ({ callerName = 'unknown', payload, response, error, durationMs = 0, status = null }) => {
+  const operationName = getGraphqlOperationName(payload?.query);
   if (error) {
     console.error('[boothApi] response', {
       functionName: callerName,
+      api: operationName,
       method: 'POST',
       url: BOOTH_GRAPHQL_URL,
+      status,
+      durationMs,
       error: error instanceof Error ? error.message : String(error),
     });
     return;
@@ -286,8 +298,11 @@ const logBoothResponse = ({ callerName = 'unknown', response, error }) => {
 
   console.log('[boothApi] response', {
     functionName: callerName,
+    api: operationName,
     method: 'POST',
     url: BOOTH_GRAPHQL_URL,
+    status,
+    durationMs,
     hasData: Boolean(response),
   });
 };
@@ -393,28 +408,30 @@ const requestBoothGraphql = async (query, variables = {}, { requiresAuth = true,
       headers,
     });
 
+    const startedAt = Date.now();
     const response = await fetch(BOOTH_GRAPHQL_URL, {
       method: 'POST',
       headers,
       body: JSON.stringify({ query, variables }),
     });
+    const durationMs = Date.now() - startedAt;
 
     if (!response.ok) {
       const text = await response.text();
       const error = new Error(`Booth GraphQL request failed (${response.status}): ${text}`);
       error.status = response.status;
-      logBoothResponse({ callerName, error });
+      logBoothResponse({ callerName, payload: { query, variables }, status: response.status, durationMs, error });
       throw error;
     }
 
     const payload = await response.json();
     if (payload.errors?.length) {
       const error = new Error(payload.errors[0]?.message || 'Booth GraphQL request failed.');
-      logBoothResponse({ callerName, error });
+      logBoothResponse({ callerName, payload: { query, variables }, status: response.status, durationMs, error });
       throw error;
     }
 
-    logBoothResponse({ callerName, response: payload.data });
+    logBoothResponse({ callerName, payload: { query, variables }, status: response.status, durationMs, response: payload.data });
     return payload.data;
   };
 

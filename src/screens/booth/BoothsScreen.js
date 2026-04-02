@@ -72,6 +72,40 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
     };
   }, [cycle, perPage, safePage, search, status, withLoader]);
 
+  const showPagination = booths.length > 0;
+  const renderPagination = () => (
+    <View style={styles.formCard}>
+      <Text style={styles.cardSubtitle}>
+        Showing {totalCount === 0 ? 0 : (safePage - 1) * perPage + 1} - {Math.min(safePage * perPage, totalCount)} of {totalCount} booths
+      </Text>
+      <View style={styles.row}>
+        <TouchableOpacity onPress={() => setPage((prev) => Math.max(1, prev - 1))} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Prev</Text>
+        </TouchableOpacity>
+        <Text style={[styles.rowValue, { alignSelf: 'center' }]}>
+          Page {safePage} / {totalPages}
+        </Text>
+        <TouchableOpacity onPress={() => setPage((prev) => Math.min(totalPages, prev + 1))} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Next</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.chipRow}>
+        {PAGE_SIZE_OPTIONS.map((option) => (
+          <TouchableOpacity
+            key={option}
+            onPress={() => {
+              setPerPage(option);
+              setPage(1);
+            }}
+            style={[styles.chip, perPage === option && styles.chipActive]}
+          >
+            <Text style={styles.chipText}>{option} / page</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+
   return (
     <ScreenShell title="Booths" subtitle={error || 'Browse and manage booth approvals'} onBack={pop} backgroundColor="#f1f5f9">
       <View style={styles.tabsBar}>
@@ -122,6 +156,8 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
         style={styles.input}
       />
 
+      {showPagination ? renderPagination() : null}
+
       {booths.length > 0
         ? booths.map((booth) => (
             <TouchableOpacity key={booth.id} style={styles.listItem} onPress={() => push('boothDetails', { boothId: booth.id })}>
@@ -149,36 +185,7 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
         </View>
       ) : null}
 
-      <View style={styles.formCard}>
-        <Text style={styles.cardSubtitle}>
-          Showing {totalCount === 0 ? 0 : (safePage - 1) * perPage + 1} - {Math.min(safePage * perPage, totalCount)} of {totalCount} booths
-        </Text>
-        <View style={styles.row}>
-          <TouchableOpacity onPress={() => setPage((prev) => Math.max(1, prev - 1))} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Prev</Text>
-          </TouchableOpacity>
-          <Text style={[styles.rowValue, { alignSelf: 'center' }]}>
-            Page {safePage} / {totalPages}
-          </Text>
-          <TouchableOpacity onPress={() => setPage((prev) => Math.min(totalPages, prev + 1))} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Next</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.chipRow}>
-          {PAGE_SIZE_OPTIONS.map((option) => (
-            <TouchableOpacity
-              key={option}
-              onPress={() => {
-                setPerPage(option);
-                setPage(1);
-              }}
-              style={[styles.chip, perPage === option && styles.chipActive]}
-            >
-              <Text style={styles.chipText}>{option} / page</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
+      {showPagination ? renderPagination() : null}
     </ScreenShell>
   );
 };

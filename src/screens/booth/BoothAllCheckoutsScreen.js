@@ -81,6 +81,37 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
     };
   }, [endDate, perPage, safePage, startDate, withLoader]);
 
+  const showPagination = checkouts.length > 0;
+  const renderPagination = () => (
+    <View style={styles.formCard}>
+      <View style={styles.row}>
+        <TouchableOpacity onPress={() => setPage((prev) => Math.max(1, prev - 1))} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Prev</Text>
+        </TouchableOpacity>
+        <Text style={[styles.rowValue, { alignSelf: 'center' }]}>
+          Page {safePage} of {totalPages}
+        </Text>
+        <TouchableOpacity onPress={() => setPage((prev) => Math.min(totalPages, prev + 1))} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Next</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.chipRow}>
+        {PAGE_SIZE_OPTIONS.map((size) => (
+          <TouchableOpacity
+            key={size}
+            onPress={() => {
+              setPerPage(size);
+              setPage(1);
+            }}
+            style={[styles.chip, perPage === size && styles.chipActive]}
+          >
+            <Text style={styles.chipText}>{size} / page</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+
   return (
     <ScreenShell title="All Checkouts" subtitle={error || 'Checkout summary and list'} onBack={pop} backgroundColor="#f8fafc">
       <View style={styles.formCard}>
@@ -136,33 +167,7 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
         </View>
       </View>
 
-      <View style={styles.formCard}>
-        <View style={styles.row}>
-          <TouchableOpacity onPress={() => setPage((prev) => Math.max(1, prev - 1))} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Prev</Text>
-          </TouchableOpacity>
-          <Text style={[styles.rowValue, { alignSelf: 'center' }]}>
-            Page {safePage} of {totalPages}
-          </Text>
-          <TouchableOpacity onPress={() => setPage((prev) => Math.min(totalPages, prev + 1))} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Next</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.chipRow}>
-          {PAGE_SIZE_OPTIONS.map((size) => (
-            <TouchableOpacity
-              key={size}
-              onPress={() => {
-                setPerPage(size);
-                setPage(1);
-              }}
-              style={[styles.chip, perPage === size && styles.chipActive]}
-            >
-              <Text style={styles.chipText}>{size} / page</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
+      {showPagination ? renderPagination() : null}
 
       {hasLoaded && checkouts.length === 0 ? (
         <View style={styles.formCard}>
@@ -194,6 +199,8 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
           })}
         </View>
       ) : null}
+
+      {showPagination ? renderPagination() : null}
     </ScreenShell>
   );
 };
