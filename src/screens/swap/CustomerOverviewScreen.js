@@ -5,6 +5,7 @@ import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
 import { buildCustomerUnreviewedItemsCacheKey, useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
+import { getSubscriptionKind } from '../../utils/subscriptionDisplay';
 
 const getPendingReviewItems = (response) => {
   if (Array.isArray(response?.success?.data?.items)) {
@@ -179,6 +180,11 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   const latestSubscriptionId = shopSubscribe?.id || activeSubscription?.id || '';
   const linkedPickup = findLatestPickupForSubscription(pickups, latestSubscriptionId);
   const displayedPackageName = getActivePackageDisplayName(shopSubscribe, customer.activePackage || activeSubscription?.plan || '');
+  const latestSubscriptionKind = getSubscriptionKind({
+    plan: shopSubscribe?.subscription?.name || activeSubscription?.plan || '',
+    subscriptionType: shopSubscribe?.subscription?.type_c || '',
+    subscriptionSubType: shopSubscribe?.subscription?.sub_type_c || '',
+  });
   const displayedPackageSubtitle = isShopSubscribeExpired
     ? 'Expired'
     : hasActiveShopSubscribe && activeSubscription
@@ -205,7 +211,7 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
           onPress={
             canOpenLatestPackage
               ? async () => {
-                  if (linkedPickup?.id) {
+                  if (latestSubscriptionKind === 'flexi' && linkedPickup?.id) {
                     push('customerPickupDetail', {
                       email: customer.email,
                       pickupId: linkedPickup.id,
@@ -213,7 +219,9 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
                     return;
                   }
 
-                  const pickupFromApi = await getLatestPickupForSubscription(customer.email, latestSubscriptionId).catch(() => null);
+                  const pickupFromApi = latestSubscriptionKind === 'flexi'
+                    ? await getLatestPickupForSubscription(customer.email, latestSubscriptionId).catch(() => null)
+                    : null;
 
                   if (pickupFromApi?.id) {
                     primeCustomerPickupDetail(pickupFromApi.id, pickupFromApi);

@@ -80,6 +80,16 @@ const SWAP_ORDER_CREATE_PATH = 'orders/save/shop';
 const SWAP_ORDER_LIST_PATH = 'orders/list';
 const SWAP_ORDER_DETAIL_PATH = 'orders/detail';
 const EMPTY_ARRAY = [];
+const CUSTOMER_DETAILS_REQUEST = {
+  data_tenancy: 'SWAP.CUSTOMER.DATA_VIEW.DETAIL_PROTECTED',
+  detail_tenancy: 'SWAP.CUSTOMER.DETAIL_VIEW.TOKEN',
+  fetch_subscription: 'true',
+  fetch_pending_subscribe: 'true',
+  ignore_non_pickup_subscribe: 'true',
+  reset_cache: true,
+  fetch_wallets: true,
+  fetch_subscribe_list: true,
+};
 const TOKEN_SCOPE = Object.freeze({
   GUEST: 'guest',
   OPERATOR: 'operator',
@@ -1600,6 +1610,76 @@ const resolveSwapSrUserId = async () => {
   return srUserId;
 };
 
+const getCustomerDetailsRecord = (response) => {
+  const data = getResponseData(response);
+  return data?.customer || response?.customer || null;
+};
+
+const getCustomerDetailsSubscribeList = (response) => {
+  const data = getResponseData(response);
+  const customer = getCustomerDetailsRecord(response);
+
+  if (Array.isArray(data?.subscribes)) {
+    return data.subscribes;
+  }
+
+  if (Array.isArray(customer?.subscribes_list)) {
+    return customer.subscribes_list;
+  }
+
+  return EMPTY_ARRAY;
+};
+
+const matchesSubscribeId = (subscribe, subscribeId = '') =>
+  String(subscribe?.id || subscribe?.unique_id_c || '').trim() === String(subscribeId || '').trim();
+
+const verifyFlexiPlanPurchaseState = ({ response, newSubscribeId = '', previousSubscribeId = '' } = {}) => {
+  const customer = getCustomerDetailsRecord(response);
+  const subscribeList = getCustomerDetailsSubscribeList(response);
+  const activeShopSubscribe = customer?.shop_subscribe || null;
+  const activeShopSubscribeId = String(activeShopSubscribe?.id || '').trim();
+  const normalizedNewSubscribeId = String(newSubscribeId || '').trim();
+  const normalizedPreviousSubscribeId = String(previousSubscribeId || '').trim();
+  const newSubscribe = subscribeList.find((subscribe) => matchesSubscribeId(subscribe, normalizedNewSubscribeId)) || null;
+  const previousSubscribe = subscribeList.find((subscribe) => matchesSubscribeId(subscribe, normalizedPreviousSubscribeId)) || null;
+  const previousCompleted =
+    !normalizedPreviousSubscribeId ||
+    String(previousSubscribe?.status_c || '').trim().toLowerCase() === 'completed';
+  const activeMatchesNew = normalizedNewSubscribeId && activeShopSubscribeId === normalizedNewSubscribeId;
+  const verified = Boolean(activeMatchesNew || (previousCompleted && newSubscribe));
+
+  return {
+    verified,
+    activeMatchesNew,
+    previousCompleted,
+    activeShopSubscribe,
+    newSubscribe,
+    previousSubscribe,
+    customer,
+  };
+};
+
+const waitForFlexiPlanVerification = async ({
+  customerEmail = '',
+  authToken = '',
+  newSubscribeId = '',
+  previousSubscribeId = '',
+  delayMs = 5000,
+} = {}) => {
+  await delay(delayMs);
+  const response = await getCustomerDetailsByToken({ customerEmail, authToken });
+  const verification = verifyFlexiPlanPurchaseState({
+    response,
+    newSubscribeId,
+    previousSubscribeId,
+  });
+
+  return {
+    response,
+    ...verification,
+  };
+};
+
 const buyPointsForCheckout = async ({ requiredPoints, paymentMethod, authToken, tokenScope = '' }) => {
   if (requiredPoints <= 0) {
     throw new Error('Required points must be greater than zero.');
@@ -2564,6 +2644,44 @@ export const saveShopSubscription = async ({
   }
 };
 
+export const updateCustomerSubscribe = async ({
+  subscribeId = '',
+  subscribe = {},
+  customerEmail = '',
+  authToken = '',
+} = {}) => {
+  if (!subscribeId) {
+    throw new Error('Subscription id is required for subscription update.');
+  }
+
+  const customerAuthToken = await resolveCustomerAuthToken(customerEmail, authToken);
+  const customerTokenScope = normalizeEmail(customerEmail) ? createCustomerTokenScope(customerEmail) : '';
+
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return createSwapSuccessResponse('SUBSCRIBE-200', 'Subscription updated', {
+      subscribe_id: subscribeId,
+      subscribe: {
+        id: subscribeId,
+        ...subscribe,
+      },
+    });
+  }
+
+  return postJson(
+    'subscribes/update',
+    {
+      subscribe_id: subscribeId,
+      subscribe,
+    },
+    true,
+    {},
+    customerAuthToken,
+    'updateCustomerSubscribe',
+    customerTokenScope
+  );
+};
+
 /**
  * Get customer subscribes list using customer id returned by login API.
  * Endpoint: POST /{api_ver}/subscribes/list
@@ -2622,22 +2740,111 @@ export const getCustomerDetails = async () => {
 
   return postJson(
     'customers/get',
-    {
-      data_tenancy: 'SWAP.CUSTOMER.DATA_VIEW.DETAIL_PROTECTED',
-      detail_tenancy: 'SWAP.CUSTOMER.DETAIL_VIEW.TOKEN',
-      fetch_subscription: 'true',
-      fetch_pending_subscribe: 'true',
-      ignore_non_pickup_subscribe: 'true',
-      reset_cache: true,
-      fetch_wallets: true,
-      fetch_subscribe_list: true,
-    },
+    CUSTOMER_DETAILS_REQUEST,
     true,
     {},
     '',
     'getCustomerDetails',
     TOKEN_SCOPE.OPERATOR
   );
+};
+
+export const getCustomerDetailsByToken = async ({ customerEmail = '', authToken = '' } = {}) => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return toMockCustomerDetailResponse(customerEmail);
+  }
+
+  const customerAuthToken = await resolveCustomerAuthToken(customerEmail, authToken);
+  const customerTokenScope = normalizeEmail(customerEmail) ? createCustomerTokenScope(customerEmail) : '';
+
+  return postJson(
+    'customers/get',
+    CUSTOMER_DETAILS_REQUEST,
+    true,
+    {},
+    customerAuthToken,
+    'getCustomerDetailsByToken',
+    customerTokenScope
+  );
+};
+
+export const purchaseFlexiPlan = async ({
+  customerEmail = '',
+  authToken = '',
+  srUserId = '',
+  paymentMode = 'cash',
+  subscription = null,
+  activeSubscription = null,
+} = {}) => {
+  if (!subscription?.id) {
+    throw new Error('Missing subscription data for flexi plan purchase.');
+  }
+
+  const customerAuthToken = await resolveCustomerAuthToken(customerEmail, authToken);
+  const customerTokenScope = normalizeEmail(customerEmail) ? createCustomerTokenScope(customerEmail) : '';
+  const currentActiveSubscriptionId = String(activeSubscription?.id || '').trim();
+
+  if (currentActiveSubscriptionId) {
+    const updateResponse = await updateCustomerSubscribe({
+      subscribeId: currentActiveSubscriptionId,
+      subscribe: {
+        status_c: 'completed',
+      },
+      customerEmail,
+      authToken: customerAuthToken,
+    });
+    assertSwapSuccess(updateResponse);
+  }
+
+  const saveResponse = await saveShopSubscription({
+    paymentMode,
+    srUserId,
+    subscription,
+    authToken: customerAuthToken,
+    tokenScope: customerTokenScope,
+  });
+  assertSwapSuccess(saveResponse);
+
+  const subscribeId = extractCheckoutSubscribeId(saveResponse);
+  if (!subscribeId) {
+    throw new Error('Subscription purchase response did not include a subscribe id.');
+  }
+
+  let verification;
+  try {
+    verification = await waitForFlexiPlanVerification({
+      customerEmail,
+      authToken: customerAuthToken,
+      newSubscribeId: subscribeId,
+      previousSubscribeId: currentActiveSubscriptionId,
+      delayMs: 5000,
+    });
+  } catch (error) {
+    verification = {
+      verified: false,
+      error: error?.message || 'Verification failed.',
+      response: null,
+      activeMatchesNew: false,
+      previousCompleted: false,
+      activeShopSubscribe: null,
+      newSubscribe: null,
+      previousSubscribe: null,
+      customer: null,
+    };
+  }
+
+  return {
+    subscribeId,
+    saveResponse,
+    verification,
+    verified: verification.verified,
+    message: verification.verified
+      ? 'Subscription purchased successfully.'
+      : verification?.error
+        ? `Subscription was saved, but verification failed: ${verification.error}`
+        : 'Subscription was saved, but the refreshed customer details did not confirm the update yet.',
+  };
 };
 
 /**

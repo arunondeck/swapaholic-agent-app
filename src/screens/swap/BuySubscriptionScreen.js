@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { saveShopSubscription } from '../../api/swapOpsApi';
+import { purchaseFlexiPlan } from '../../api/swapOpsApi';
 import { Card } from '../../components/Card';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../context/LoaderContext';
@@ -32,7 +32,9 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
   const fetchShopSubscriptions = useSwapStore((state) => state.fetchShopSubscriptions);
   const activeCustomer = useSwapStore((state) => state.activeCustomer);
   const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
+  const fetchCustomerActivePackageIfNeeded = useSwapStore((state) => state.fetchCustomerActivePackageIfNeeded);
   const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
+  const fetchCustomerSubscriptionsIfNeeded = useSwapStore((state) => state.fetchCustomerSubscriptionsIfNeeded);
   const invalidateCustomerCache = useSwapStore((state) => state.invalidateCustomerCache);
   const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
   const shopCustomerId = useAppSessionStore((state) => state.shopCustomerId);
@@ -77,6 +79,7 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
   const payloadSubscription = paymentSummary.payableSubscription;
   const unitPrice = paymentSummary.perItemPayable;
   const calculatedPrice = paymentSummary.cashPayable;
+  const currentShopSubscription = customer?.customerSubscribe?.shop_subscribe || null;
 
   if (!customer) {
     return (
@@ -125,22 +128,30 @@ export const BuySubscriptionScreen = ({ pop, customerEmail }) => {
         itemCount,
         paymentMode: selectedPaymentMethod,
         srUserId,
+        activeSubscriptionId: currentShopSubscription?.id || '',
         subscription: payloadSubscription,
       });
-      await withLoader(
-        saveShopSubscription({
-          paymentMode: selectedPaymentMethod,
-          srUserId,
+      const result = await withLoader(
+        purchaseFlexiPlan({
+          customerEmail,
           authToken: customerToken,
+          srUserId,
+          paymentMode: selectedPaymentMethod,
           subscription: payloadSubscription,
+          activeSubscription: currentShopSubscription,
         }),
         'Saving subscription purchase...'
       );
 
       invalidateCustomerCache(['profile', 'activePackage', 'subscriptions', 'subscriptionDetailsById']);
+      await Promise.all([
+        fetchCustomerProfileIfNeeded(customerEmail, { force: true }),
+        fetchCustomerActivePackageIfNeeded(customerEmail, { force: true }),
+        fetchCustomerSubscriptionsIfNeeded(customerEmail, { force: true }),
+      ]);
       setPaymentModalVisible(false);
       setSelectedPaymentMethod('');
-      setNotice('Subscription purchased successfully.');
+      setNotice(result?.message || 'Subscription purchased successfully.');
     } catch (submitError) {
       setNotice(submitError.message || 'Failed to purchase subscription.');
     } finally {
