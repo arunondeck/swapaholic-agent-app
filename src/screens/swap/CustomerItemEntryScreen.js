@@ -1,50 +1,107 @@
+// @ts-check
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Image, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import { createCustomerPickupItem } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
+import { TaxonomySelect } from '../../components/TaxonomySelect';
+import { filterSizesByTaxonomy } from '../../services/sizeFilterService';
 import { useLoader } from '../../utils/LoaderContextShared';
 import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
 
-const YES_NO_OPTIONS = [
-  { label: 'Yes', value: 'yes' },
-  { label: 'No', value: 'no' },
-];
+/**
+ * @param {unknown} error
+ * @param {string} fallbackMessage
+ * @returns {string}
+ */
+const getErrorMessage = (error, fallbackMessage) => (error instanceof Error ? error.message : fallbackMessage);
 
+/**
+ * @template T
+ * @param {{
+ *   options?: T[],
+ *   selectedValue?: string,
+ *   onSelect: (option: T) => void,
+ *   getKey: (option: T) => string,
+ *   getLabel: (option: T) => string
+ * }} props
+ */
+const renderChipOptions = ({ options = [], selectedValue = '', onSelect, getKey, getLabel }) => (
+  <View style={styles.chipRow}>
+    {options.map((option) => {
+      const key = getKey(option);
+      const label = getLabel(option);
+      const isSelected = selectedValue === key;
+
+      return (
+        <TouchableOpacity key={key} onPress={() => onSelect(option)} style={[styles.chip, isSelected && styles.chipActive]}>
+          <Text style={styles.chipText}>{label}</Text>
+        </TouchableOpacity>
+      );
+    })}
+  </View>
+);
+
+/** @type {import('../../types/swapTypes').SwapItemEntryOptions} */
+const INITIAL_ITEM_OPTIONS = {
+  categoryOptions: {},
+  conditionOptions: [],
+  brandOptions: [],
+  userSegmentOptions: [],
+  styleOptions: [],
+  sizeOptions: [],
+  materialOptions: [],
+  madeInOptions: [],
+  occasionOptions: [],
+  categoryEntities: [],
+};
+
+/**
+ * @param {{
+ *   pop: () => void,
+ *   customerEmail: string,
+ *   sourceType: 'subscription' | 'pickup',
+ *   sourceId: string
+ * }} props
+ */
 export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, sourceId }) => {
-  const [itemOptions, setItemOptions] = useState({
-    categoryOptions: {},
-    colorOptions: [],
-    conditionOptions: [],
-    brandOptions: [],
-    userSegmentOptions: [],
-  });
+  /** @type {[import('../../types/swapTypes').SwapItemEntryOptions, React.Dispatch<React.SetStateAction<import('../../types/swapTypes').SwapItemEntryOptions>>]} */
+  const [itemOptions, setItemOptions] = useState(INITIAL_ITEM_OPTIONS);
   const [photoTaken, setPhotoTaken] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [photoUri, setPhotoUri] = useState('');
-  const [thumbnailFile, setThumbnailFile] = useState(null);
+  const [thumbnailFile, setThumbnailFile] = useState(/** @type {import('../../types/swapTypes').SwapAddItemRequest['thumbnailFile'] | null} */ (null));
   const [brand, setBrand] = useState('');
+  const [categoryId, setCategoryId] = useState('');
   const [category, setCategory] = useState('');
-  const [subcategory, setSubcategory] = useState('');
+  const [sizeId, setSizeId] = useState('');
   const [size, setSize] = useState('');
-  const [points, setPoints] = useState('');
+  const [materialId, setMaterialId] = useState('');
   const [material, setMaterial] = useState('');
-  const [color, setColor] = useState('');
   const [condition, setCondition] = useState('');
   const [damage, setDamage] = useState('');
-  const [reject, setReject] = useState('no');
   const [userSegmentId, setUserSegmentId] = useState('');
   const [occasionId, setOccasionId] = useState('');
   const [madeInId, setMadeInId] = useState('');
-  const [diy, setDiy] = useState('no');
-  const [newWithTag, setNewWithTag] = useState('no');
+  const [diy, setDiy] = useState(false);
+  const [newWithTag, setNewWithTag] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [savedItemId, setSavedItemId] = useState('');
   const [error, setError] = useState('');
+  const [isMoreInfoOpen, setIsMoreInfoOpen] = useState(false);
+  /** @type {[{ categories: number, userSegments: number }, React.Dispatch<React.SetStateAction<{ categories: number, userSegments: number }>>]} */
+  const [debugCounts, setDebugCounts] = useState({
+    categories: 0,
+    userSegments: 0,
+  });
+  /** @type {React.MutableRefObject<import('expo-camera').CameraView | null>} */
   const cameraRef = useRef(null);
-  const [permission, requestPermission] = useCameraPermissions();
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [mediaPermission, requestMediaPermission] = ImagePicker.useMediaLibraryPermissions();
+  /** @type {{ withLoader: <T>(task: Promise<T>, nextMessage?: string) => Promise<T> }} */
   const { withLoader } = useLoader();
   const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
   const subscriptionEntry = useSwapStore((state) => state.currentCustomerData.subscriptionDetailsById[String(sourceId)] || null);
@@ -55,9 +112,10 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
   const fetchReferenceDataIfNeeded = useSwapStore((state) => state.fetchReferenceDataIfNeeded);
   const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
   const invalidateCustomerCache = useSwapStore((state) => state.invalidateCustomerCache);
+  const requestPickupDetailRefresh = useSwapStore((state) => state.requestPickupDetailRefresh);
   const customer = profileEntry.data;
-  const sourceEntry = sourceType === 'subscription' ? subscriptionEntry : pickupEntry;
-  const source = sourceEntry?.data || null;
+  /** @type {import('../../types/swapTypes').SwapPickup | null} */
+  const pickupSource = pickupEntry?.data || null;
 
   useEffect(() => {
     const loadData = async () => {
@@ -77,25 +135,43 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
 
       try {
         setError('');
-        const [, options] = hasUsableCache
-          ? await Promise.all([profilePromise, optionsPromise, sourcePromise])
-          : await withLoader(Promise.all([profilePromise, optionsPromise, sourcePromise]), 'Loading item entry...');
+        /** @type {import('../../types/swapTypes').SwapItemEntryOptions} */
+        let options = INITIAL_ITEM_OPTIONS;
 
-        const categories = Object.keys(options.categoryOptions);
-        const defaultCategory = categories[0] || '';
-        const defaultSubcategory = options.categoryOptions[defaultCategory]?.[0] || '';
+        if (hasUsableCache) {
+          await Promise.all([profilePromise, sourcePromise]);
+          options = await optionsPromise;
+        } else {
+          await withLoader(Promise.all([profilePromise, sourcePromise]), 'Loading item entry...');
+          options = await optionsPromise;
+        }
+
+        const nextDebugCounts = {
+          categories: Array.isArray(options.categoryEntities) ? options.categoryEntities.length : 0,
+          userSegments: Array.isArray(options.userSegmentOptions) ? options.userSegmentOptions.length : 0,
+        };
 
         setItemOptions(options);
-        setCategory(defaultCategory);
-        setSubcategory(defaultSubcategory);
-        setColor(options.colorOptions[0] || '');
+        setDebugCounts(nextDebugCounts);
+        setCategoryId('');
+        setCategory('');
+        setSizeId('');
+        setSize('');
         setCondition(options.conditionOptions[0] || '');
-        setMaterial(options.materialOptions?.[0]?.name || '');
-        setOccasionId(options.occasionOptions?.[0]?.id || '');
-        setMadeInId(options.madeInOptions?.[0]?.id || '');
-        setUserSegmentId(options.userSegmentOptions?.[0]?.id || '');
+        setMaterialId('');
+        setMaterial('');
+        setOccasionId('');
+        setMadeInId('');
+        setUserSegmentId('');
+        console.log('[CustomerItemEntryScreen] option counts', nextDebugCounts);
       } catch (loadError) {
-        setError(loadError.message || 'Failed to load item entry data');
+        const errorMessage = getErrorMessage(loadError, 'Failed to load item entry data');
+        console.log('[CustomerItemEntryScreen] loadData failed', {
+          message: errorMessage,
+          sourceType,
+          sourceId,
+        });
+        setError(errorMessage);
       }
     };
 
@@ -112,48 +188,154 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
     withLoader,
   ]);
 
-  const categories = useMemo(() => Object.keys(itemOptions.categoryOptions), [itemOptions.categoryOptions]);
-  const subcategoryOptions = useMemo(() => itemOptions.categoryOptions[category] || [], [category, itemOptions.categoryOptions]);
+  const categories = useMemo(() => itemOptions.categoryEntities || [], [itemOptions.categoryEntities]);
   const selectedBrand = useMemo(
     () => itemOptions.brandOptions.find((option) => String(option?.name || '').trim().toLowerCase() === brand.trim().toLowerCase()) || null,
     [brand, itemOptions.brandOptions]
   );
-  const selectedStyle = useMemo(
-    () => itemOptions.styleOptions?.find((option) => String(option?.name || '').trim().toLowerCase() === subcategory.trim().toLowerCase()) || null,
-    [itemOptions.styleOptions, subcategory]
-  );
-  const selectedColor = useMemo(
-    () => itemOptions.colorEntities?.find((option) => String(option?.name || '').trim().toLowerCase() === color.trim().toLowerCase()) || null,
-    [color, itemOptions.colorEntities]
-  );
   const selectedMaterial = useMemo(
-    () => itemOptions.materialOptions?.find((option) => String(option?.name || '').trim().toLowerCase() === material.trim().toLowerCase()) || null,
-    [itemOptions.materialOptions, material]
+    () => itemOptions.materialOptions?.find((option) => option.id === materialId) || null,
+    [materialId, itemOptions.materialOptions]
+  );
+  const selectedSize = useMemo(
+    () => itemOptions.sizeOptions?.find((option) => option.id === sizeId) || null,
+    [itemOptions.sizeOptions, sizeId]
+  );
+  const selectedOccasion = useMemo(
+    () => itemOptions.occasionOptions?.find((option) => option.id === occasionId) || null,
+    [itemOptions.occasionOptions, occasionId]
+  );
+  const selectedUserSegment = useMemo(
+    () => itemOptions.userSegmentOptions?.find((option) => option.id === userSegmentId) || null,
+    [itemOptions.userSegmentOptions, userSegmentId]
+  );
+  const filteredSizeOptions = useMemo(
+    () =>
+      filterSizesByTaxonomy({
+        sizes: itemOptions.sizeOptions || [],
+        categoryName: category,
+        userSegmentName: selectedUserSegment?.name || '',
+      }),
+    [category, itemOptions.sizeOptions, selectedUserSegment?.name]
   );
   const canSubmit =
     photoTaken &&
     brand.trim().length > 0 &&
-    category.trim().length > 0 &&
-    subcategory.trim().length > 0 &&
-    size.trim().length > 0 &&
-    points.trim().length > 0 &&
-    material.trim().length > 0 &&
-    color.trim().length > 0 &&
-    condition.trim().length > 0;
+    categoryId.trim().length > 0 &&
+    sizeId.trim().length > 0 &&
+    occasionId.trim().length > 0 &&
+    userSegmentId.trim().length > 0;
 
+  /**
+   * @param {string} nextCategory
+   */
   const onCategoryChange = (nextCategory) => {
-    setCategory(nextCategory);
-    setSubcategory(itemOptions.categoryOptions[nextCategory]?.[0] || '');
+    const nextCategoryOption = categories.find((option) => option.id === nextCategory) || null;
+    const nextCategoryName = nextCategoryOption?.name || '';
+    setCategoryId(nextCategoryOption?.id || '');
+    setCategory(nextCategoryName);
+    setSizeId('');
+    setSize('');
+  };
+
+  /**
+   * @param {string} nextUserSegmentId
+   */
+  const onUserSegmentChange = (nextUserSegmentId) => {
+    setUserSegmentId(nextUserSegmentId);
+    setSizeId('');
+    setSize('');
+  };
+
+  /**
+   * @param {string} nextSizeId
+   */
+  const onSizeChange = (nextSizeId) => {
+    const nextSize = filteredSizeOptions.find((option) => option.id === nextSizeId) || null;
+    setSizeId(nextSizeId);
+    setSize(nextSize?.name || '');
+  };
+
+  /**
+   * @param {string} nextMaterialId
+   */
+  const onMaterialChange = (nextMaterialId) => {
+    const nextMaterial = itemOptions.materialOptions?.find((option) => option.id === nextMaterialId) || null;
+    setMaterialId(nextMaterialId);
+    setMaterial(nextMaterial?.name || '');
+  };
+
+  /**
+   * @param {string} uri
+   */
+  const updateSelectedPhoto = (uri) => {
+    const nextThumbnailFile = {
+      uri,
+      name: `pickup-item-${Date.now()}.jpg`,
+      type: 'image/jpeg',
+    };
+
+    setThumbnailFile(nextThumbnailFile);
+    setPhotoUri(uri);
+    setPhotoTaken(true);
+    setCameraOpen(false);
+  };
+
+  const ensureCameraPermission = async () => {
+    const currentPermission = cameraPermission?.granted ? cameraPermission : await requestCameraPermission();
+    if (!currentPermission?.granted) {
+      Alert.alert('Camera Permission', 'Camera access is required to take a product picture.');
+      return false;
+    }
+
+    return true;
+  };
+
+  const ensureMediaPermission = async () => {
+    const currentPermission = mediaPermission?.granted ? mediaPermission : await requestMediaPermission();
+    if (!currentPermission?.granted) {
+      Alert.alert('Photos Permission', 'Photo library access is required to select an existing product picture.');
+      return false;
+    }
+
+    return true;
   };
 
   const openCamera = async () => {
-    const currentPermission = permission?.granted ? permission : await requestPermission();
-    if (!currentPermission?.granted) {
-      Alert.alert('Camera Permission', 'Camera access is required to attach an item photo.');
+    const hasPermission = await ensureCameraPermission();
+    if (!hasPermission) {
       return;
     }
 
     setCameraOpen(true);
+  };
+
+  const selectPicture = async () => {
+    const hasPermission = await ensureMediaPermission();
+    if (!hasPermission) {
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.7,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const selectedAsset = result.assets?.[0];
+      if (!selectedAsset?.uri) {
+        throw new Error('Unable to select photo.');
+      }
+
+      updateSelectedPhoto(selectedAsset.uri);
+    } catch (selectionError) {
+      Alert.alert('Photo Selection Error', getErrorMessage(selectionError, 'Unable to select photo.'));
+    }
   };
 
   const capturePhoto = async () => {
@@ -166,45 +348,50 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
         throw new Error('Unable to capture photo.');
       }
 
-      const nextThumbnailFile = {
-        uri: result.uri,
-        name: `pickup-item-${Date.now()}.jpg`,
-        type: 'image/jpeg',
-      };
-
-      setThumbnailFile(nextThumbnailFile);
-      setPhotoUri(result.uri);
-      setPhotoTaken(true);
-      setCameraOpen(false);
+      updateSelectedPhoto(result.uri);
     } catch (captureError) {
-      Alert.alert('Camera Error', captureError.message || 'Unable to capture photo.');
+      Alert.alert('Camera Error', getErrorMessage(captureError, 'Unable to capture photo.'));
     }
   };
 
   const submitItem = async () => {
-    if (!source?.id || sourceType !== 'pickup') {
+    if (!pickupSource?.unique_id_c) {
       setError('Adding a new item currently requires a pickup source.');
       return;
     }
 
     if (!thumbnailFile) {
-      setError('Capture an item photo before submitting.');
+      setError('Attach an item photo before submitting.');
       return;
     }
 
-    const payload = {
-      sub_status_c: 'out_inventory',
-      brand_label_c: selectedBrand?.id || brand.trim(),
-      brand_segment_id_c: userSegmentId || selectedBrand?.brand_segments?.id || '',
-      occasion_id_c: occasionId.trim(),
-      style_id_c: selectedStyle?.id || '',
-      color_id_c: selectedColor?.id || '',
-      material_id_c: selectedMaterial?.id || '',
-      made_in_id_c: madeInId || '',
-      diy,
-      new_with_tag_c: newWithTag,
-      rejected_reason_c: reject === 'yes' ? 'manual_reject' : '',
-    };
+    /** @type {Record<string, unknown>} */
+    const payload = {};
+
+    if (selectedBrand?.id) {
+      payload.brand_id_c = selectedBrand.id;
+    }
+    if (selectedBrand?.brand_segments?.id) {
+      payload.brand_segment_id_c = selectedBrand.brand_segments.id;
+    }
+    if (userSegmentId) {
+      payload.user_segment_id_c = userSegmentId;
+    }
+    if (categoryId) {
+      payload.category_id_c = categoryId;
+    }
+    if (sizeId) {
+      payload.size_id_c = sizeId;
+    }
+    if (occasionId.trim()) {
+      payload.occasion_id_c = occasionId.trim();
+    }
+    if (selectedMaterial?.id) {
+      payload.material_id_c = selectedMaterial.id;
+    }
+    if (madeInId) {
+      payload.made_in_id_c = madeInId;
+    }
 
     try {
       setSubmitting(true);
@@ -212,7 +399,7 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
 
       const result = await withLoader(
         createCustomerPickupItem({
-          pickupId: source.id,
+          pickupId: pickupSource.unique_id_c,
           thumbnailFile,
           item: payload,
         }),
@@ -220,17 +407,23 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
       );
 
       setSavedItemId(result.itemId || '');
+      if (sourceType === 'pickup') {
+        requestPickupDetailRefresh(pickupSource.id, 'itemAdded');
+        pop();
+        return;
+      }
+
       setSubmitted(true);
       invalidateCustomerCache(['pickups', 'pickupDetailsById', 'swappedInItems']);
-      await fetchCustomerPickupDetailIfNeeded(customerEmail, source.id, { force: true });
+      await fetchCustomerPickupDetailIfNeeded(customerEmail, pickupSource.id, { force: true });
     } catch (submitError) {
-      setError(submitError.message || 'Failed to save item.');
+      setError(getErrorMessage(submitError, 'Failed to save item.'));
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (!customer || !source) {
+  if (!customer || !pickupSource) {
     return (
       <ScreenShell title="Add Item" subtitle={error || 'Loading item entry form...'} onBack={pop} backgroundColor="#ffe4e1">
         <Text>{error || 'Loading...'}</Text>
@@ -241,16 +434,21 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
   return (
     <ScreenShell
       title="Add Item"
-      subtitle={`${customer.name} | ${sourceType === 'subscription' ? source.plan : source.id}`}
+      subtitle={`${customer.name} | ${pickupSource.unique_id_c || pickupSource.id}`}
       onBack={pop}
       backgroundColor="#ffe4e1"
     >
       <View style={styles.formCard}>
-        <TouchableOpacity onPress={openCamera} style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>{photoTaken ? 'Retake Picture' : 'Take Picture'}</Text>
-        </TouchableOpacity>
+        <View style={styles.buttonGroupRow}>
+          <TouchableOpacity onPress={openCamera} style={[styles.secondaryButton, styles.buttonGroupItem]}>
+            <Text style={styles.secondaryButtonText}>{photoTaken ? 'Retake Picture' : 'Take Picture'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={selectPicture} style={[styles.secondaryButton, styles.buttonGroupItem]}>
+            <Text style={styles.secondaryButtonText}>Select Picture</Text>
+          </TouchableOpacity>
+        </View>
 
-        {photoUri ? <Image source={{ uri: photoUri }} style={styles.itemImage} resizeMode="cover" /> : null}
+        {photoUri ? <Image source={{ uri: photoUri }} style={styles.imagePreview} resizeMode="cover" /> : null}
 
         {cameraOpen ? (
           <View style={styles.scannerCard}>
@@ -270,194 +468,102 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
           </View>
         ) : null}
 
-        <TextInput placeholder="Brand" placeholderTextColor="#8b8b8b" style={styles.input} value={brand} onChangeText={setBrand} />
+        <View style={styles.formSection}>
+          <Text style={styles.sectionTitle}>Taxonomy</Text>
+          <Text style={styles.helperText}>
+            Category count: {debugCounts.categories} | User segment count: {debugCounts.userSegments}
+          </Text>
 
-        <Text style={styles.selectLabel}>Category</Text>
-        <View style={styles.chipRow}>
-          {categories.map((option) => (
-            <TouchableOpacity
-              key={option}
-              onPress={() => onCategoryChange(option)}
-              style={[styles.chip, category === option && styles.chipActive]}
-            >
-              <Text style={styles.chipText}>{option}</Text>
-            </TouchableOpacity>
-          ))}
+          <TaxonomySelect
+            taxonomyName="Category"
+            options={categories}
+            selectedId={categoryId}
+            onSelect={onCategoryChange}
+          />
+
+          <TaxonomySelect
+            taxonomyName="User Segment"
+            options={itemOptions.userSegmentOptions}
+            selectedId={userSegmentId}
+            onSelect={onUserSegmentChange}
+          />
+
+          <TaxonomySelect
+            taxonomyName="Brand"
+            options={itemOptions.brandOptions}
+            selectedId={selectedBrand?.id || ''}
+            searchable
+            onSelect={(nextBrandId) => {
+              const nextBrand = itemOptions.brandOptions.find((option) => option.id === nextBrandId) || null;
+              setBrand(nextBrand?.name || '');
+            }}
+          />
+
+          <TaxonomySelect
+            taxonomyName="Occasion"
+            options={itemOptions.occasionOptions || []}
+            selectedId={occasionId}
+            onSelect={setOccasionId}
+          />
+
+          <TaxonomySelect
+            taxonomyName="Size"
+            options={filteredSizeOptions}
+            selectedId={sizeId}
+            onSelect={onSizeChange}
+          />
         </View>
 
-        <Text style={styles.selectLabel}>Subcategory</Text>
-        <View style={styles.chipRow}>
-          {subcategoryOptions.map((option) => (
-            <TouchableOpacity
-              key={option}
-              onPress={() => setSubcategory(option)}
-              style={[styles.chip, subcategory === option && styles.chipActive]}
-            >
-              <Text style={styles.chipText}>{option}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <View style={styles.collapsibleSection}>
+          <TouchableOpacity onPress={() => setIsMoreInfoOpen((current) => !current)} style={styles.collapsibleHeader}>
+            <Text style={styles.collapsibleTitle}>More Info</Text>
+            <Text style={styles.collapsibleToggle}>{isMoreInfoOpen ? 'Hide' : 'Show'}</Text>
+          </TouchableOpacity>
+          {isMoreInfoOpen ? (
+            <View style={styles.collapsibleBody}>
+              <Text style={styles.selectLabel}>Material</Text>
+              <TaxonomySelect
+                taxonomyName="Material"
+                options={itemOptions.materialOptions || []}
+                selectedId={materialId}
+                onSelect={onMaterialChange}
+              />
 
-        <TextInput placeholder="Size" placeholderTextColor="#8b8b8b" style={styles.input} value={size} onChangeText={setSize} />
-        <TextInput
-          keyboardType="numeric"
-          placeholder="Points"
-          placeholderTextColor="#8b8b8b"
-          style={styles.input}
-          value={points}
-          onChangeText={setPoints}
-        />
-        <TextInput
-          placeholder="Material"
-          placeholderTextColor="#8b8b8b"
-          style={styles.input}
-          value={material}
-          onChangeText={setMaterial}
-        />
+              <TaxonomySelect
+                taxonomyName="Made In"
+                options={itemOptions.madeInOptions || []}
+                selectedId={madeInId}
+                onSelect={setMadeInId}
+              />
 
-        {itemOptions.materialOptions?.length ? (
-          <>
-            <Text style={styles.selectLabel}>Material</Text>
-            <View style={styles.chipRow}>
-              {itemOptions.materialOptions.map((option) => (
-                <TouchableOpacity
-                  key={option.id}
-                  onPress={() => setMaterial(option.name)}
-                  style={[styles.chip, material === option.name && styles.chipActive]}
-                >
-                  <Text style={styles.chipText}>{option.name}</Text>
-                </TouchableOpacity>
-              ))}
+              <Text style={styles.selectLabel}>Condition</Text>
+              {renderChipOptions({
+                options: itemOptions.conditionOptions,
+                selectedValue: condition,
+                onSelect: setCondition,
+                getKey: (option) => option,
+                getLabel: (option) => option,
+              })}
+
+              <TextInput
+                placeholder="Damage"
+                placeholderTextColor="#8b8b8b"
+                style={styles.input}
+                value={damage}
+                onChangeText={setDamage}
+              />
+
+              <View style={styles.row}>
+                <Text style={styles.selectLabel}>DIY</Text>
+                <Switch value={diy} onValueChange={setDiy} />
+              </View>
+
+              <View style={styles.row}>
+                <Text style={styles.selectLabel}>New With Tag</Text>
+                <Switch value={newWithTag} onValueChange={setNewWithTag} />
+              </View>
             </View>
-          </>
-        ) : null}
-
-        <Text style={styles.selectLabel}>Color</Text>
-        <View style={styles.chipRow}>
-          {itemOptions.colorOptions.map((option) => (
-            <TouchableOpacity
-              key={option}
-              onPress={() => setColor(option)}
-              style={[styles.chip, color === option && styles.chipActive]}
-            >
-              <Text style={styles.chipText}>{option}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.selectLabel}>Condition</Text>
-        <View style={styles.chipRow}>
-          {itemOptions.conditionOptions.map((option) => (
-            <TouchableOpacity
-              key={option}
-              onPress={() => setCondition(option)}
-              style={[styles.chip, condition === option && styles.chipActive]}
-            >
-              <Text style={styles.chipText}>{option}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <TextInput
-          placeholder="Damage"
-          placeholderTextColor="#8b8b8b"
-          style={styles.input}
-          value={damage}
-          onChangeText={setDamage}
-        />
-
-        <Text style={styles.selectLabel}>Rejected?</Text>
-        <View style={styles.chipRow}>
-          {YES_NO_OPTIONS.map((option) => (
-            <TouchableOpacity
-              key={`reject-${option.value}`}
-              onPress={() => setReject(option.value)}
-              style={[styles.chip, reject === option.value && styles.chipActive]}
-            >
-              <Text style={styles.chipText}>{option.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.selectLabel}>User Segment</Text>
-        <View style={styles.chipRow}>
-          {itemOptions.userSegmentOptions.map((option) => (
-            <TouchableOpacity
-              key={option.id}
-              onPress={() => setUserSegmentId(option.id)}
-              style={[styles.chip, userSegmentId === option.id && styles.chipActive]}
-            >
-              <Text style={styles.chipText}>{option.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <TextInput
-          placeholder="Occasion ID"
-          placeholderTextColor="#8b8b8b"
-          style={styles.input}
-          value={occasionId}
-          onChangeText={setOccasionId}
-        />
-
-        {itemOptions.occasionOptions?.length ? (
-          <>
-            <Text style={styles.selectLabel}>Occasion</Text>
-            <View style={styles.chipRow}>
-              {itemOptions.occasionOptions.map((option) => (
-                <TouchableOpacity
-                  key={option.id}
-                  onPress={() => setOccasionId(option.id)}
-                  style={[styles.chip, occasionId === option.id && styles.chipActive]}
-                >
-                  <Text style={styles.chipText}>{option.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </>
-        ) : null}
-
-        {itemOptions.madeInOptions?.length ? (
-          <>
-            <Text style={styles.selectLabel}>Made In</Text>
-            <View style={styles.chipRow}>
-              {itemOptions.madeInOptions.map((option) => (
-                <TouchableOpacity
-                  key={option.id}
-                  onPress={() => setMadeInId(option.id)}
-                  style={[styles.chip, madeInId === option.id && styles.chipActive]}
-                >
-                  <Text style={styles.chipText}>{option.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </>
-        ) : null}
-
-        <Text style={styles.selectLabel}>DIY?</Text>
-        <View style={styles.chipRow}>
-          {YES_NO_OPTIONS.map((option) => (
-            <TouchableOpacity
-              key={`diy-${option.value}`}
-              onPress={() => setDiy(option.value)}
-              style={[styles.chip, diy === option.value && styles.chipActive]}
-            >
-              <Text style={styles.chipText}>{option.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.selectLabel}>New With Tag</Text>
-        <View style={styles.chipRow}>
-          {YES_NO_OPTIONS.map((option) => (
-            <TouchableOpacity
-              key={`new-with-tag-${option.value}`}
-              onPress={() => setNewWithTag(option.value)}
-              style={[styles.chip, newWithTag === option.value && styles.chipActive]}
-            >
-              <Text style={styles.chipText}>{option.label}</Text>
-            </TouchableOpacity>
-          ))}
+          ) : null}
         </View>
 
         <TouchableOpacity
@@ -465,7 +571,7 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
           onPress={submitItem}
           style={[styles.primaryButton, (!canSubmit || submitting) && styles.primaryButtonDisabled]}
         >
-          <Text style={styles.primaryButtonText}>{submitting ? 'Saving...' : 'Enter'}</Text>
+          <Text style={styles.primaryButtonText}>{submitting ? 'Saving...' : 'Add Product'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -473,13 +579,15 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
         <View style={styles.listItem}>
           <Text style={styles.sectionTitle}>Entered Item</Text>
           <Text style={styles.itemMeta}>Item ID: {savedItemId || 'NA'}</Text>
-          <Text style={styles.itemMeta}>{brand} | {category} | {subcategory}</Text>
-          <Text style={styles.itemMeta}>Size: {size} | Points: {points}</Text>
-          <Text style={styles.itemMeta}>Material: {material} | Color: {color}</Text>
+          <Text style={styles.itemMeta}>{selectedBrand?.name || brand} | {category}</Text>
+          <Text style={styles.itemMeta}>Occasion: {selectedOccasion?.name || 'NA'} | User Segment: {selectedUserSegment?.name || 'NA'}</Text>
+          <Text style={styles.itemMeta}>Size: {selectedSize?.name || size || 'NA'}</Text>
+          <Text style={styles.itemMeta}>Material: {material || 'NA'}</Text>
           <Text style={styles.itemMeta}>Condition: {condition} | Damage: {damage || 'None'}</Text>
-          <Text style={styles.itemMeta}>Rejected: {reject} | DIY: {diy} | New With Tag: {newWithTag}</Text>
+          <Text style={styles.itemMeta}>DIY: {diy ? 'Yes' : 'No'} | New With Tag: {newWithTag ? 'Yes' : 'No'}</Text>
         </View>
       ) : null}
+
     </ScreenShell>
   );
 };

@@ -13,6 +13,43 @@
  */
 
 /**
+ * @typedef {SwapNamedEntity} SwapTaxonomyOption
+ */
+
+/**
+ * @typedef {SwapNamedEntity & {
+ *   brand_segments?: {
+ *     id?: string
+ *   }
+ * }} SwapBrandOption
+ */
+
+/**
+ * @typedef {{
+ *   taxonomyName: string,
+ *   options: SwapTaxonomyOption[],
+ *   selectedId: string,
+ *   onSelect: (id: string) => void,
+ *   searchable?: boolean
+ * }} SwapTaxonomySelectProps
+ */
+
+/**
+ * @typedef {{
+ *   categoryEntities?: SwapTaxonomyOption[],
+ *   categoryOptions: Record<string, string[]>,
+ *   conditionOptions: string[],
+ *   brandOptions: SwapBrandOption[],
+ *   userSegmentOptions: SwapTaxonomyOption[],
+ *   styleOptions?: SwapTaxonomyOption[],
+ *   sizeOptions?: SwapSize[],
+ *   materialOptions?: SwapTaxonomyOption[],
+ *   madeInOptions?: SwapTaxonomyOption[],
+ *   occasionOptions?: SwapTaxonomyOption[],
+ * }} SwapItemEntryOptions
+ */
+
+/**
  * @typedef {SwapNamedEntity & {code_c?: string}} SwapColor
  */
 

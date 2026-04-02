@@ -4,7 +4,6 @@ import {
   getBrands,
   getCustomerCheckoutCart,
   getCategories,
-  getColors,
   getCustomerOrderDetails,
   getCustomerOrders,
   getCustomerPickupDetails,
@@ -17,12 +16,13 @@ import {
   getMadeIns,
   getMaterials,
   getOccasions,
+  getSizes,
   getShopItemSubscriptions,
   getShopPointsSubscriptions,
   getStyles,
   getUserSegments,
 } from '../api/swapOpsApi';
-import { categoryOptions, colorOptions, conditionOptions } from '../data/mockData';
+import { categoryOptions, conditionOptions } from '../data/mockData';
 
 const CUSTOMER_CACHE_TTL_MS = 30 * 60 * 1000;
 const REFERENCE_DATA_TTL_MS = 12 * 60 * 60 * 1000;
@@ -48,6 +48,7 @@ const createCustomerDataCache = () => ({
   subscriptions: createCacheEntry([]),
   orders: createCacheEntry([]),
   swappedInItems: createCacheEntry([]),
+  pickupRefreshRequestsById: {},
   pickupDetailsById: {},
   subscriptionDetailsById: {},
   orderDetailsById: {},
@@ -59,45 +60,59 @@ const createReferenceDataCache = () => ({
   categories: createCacheEntry([]),
   userSegments: createCacheEntry([]),
   styles: createCacheEntry([]),
-  colors: createCacheEntry([]),
+  sizes: createCacheEntry([]),
   materials: createCacheEntry([]),
   madeIns: createCacheEntry([]),
   occasions: createCacheEntry([]),
 });
 
-const REFERENCE_DATA_KEYS = ['brands', 'categories', 'userSegments', 'styles', 'colors', 'materials', 'madeIns', 'occasions'];
+const REFERENCE_DATA_KEYS = ['brands', 'categories', 'userSegments', 'styles', 'sizes', 'materials', 'madeIns', 'occasions'];
 
 const createItemEntryOptions = ({
   categories = [],
   brands = [],
   userSegments = [],
   styles = [],
-  colors = [],
+  sizes = [],
   materials = [],
   madeIns = [],
   occasions = [],
 } = {}) => {
-  const categoryNames = Array.isArray(categories)
+  const categoryEntities = Array.isArray(categories)
     ? categories
-        .map((category) => String(category?.name || '').trim())
+        .map((category, index) => {
+          const name = String(category?.name || '').trim();
+          if (!name) {
+            return null;
+          }
+
+          return {
+            id: String(category?.id || `category-${index + 1}`),
+            name,
+          };
+        })
         .filter(Boolean)
     : [];
-  const resolvedCategoryNames = categoryNames.length > 0 ? categoryNames : Object.keys(categoryOptions);
+  const resolvedCategoryEntities =
+    categoryEntities.length > 0
+      ? categoryEntities
+      : Object.keys(categoryOptions).map((name, index) => ({
+          id: `mock-category-${index + 1}`,
+          name,
+        }));
+  const resolvedCategoryNames = resolvedCategoryEntities.map((category) => category.name);
   const resolvedCategoryOptions = Object.fromEntries(
     resolvedCategoryNames.map((name) => [name, categoryOptions[name] || [name]])
   );
 
   return {
+    categoryEntities: resolvedCategoryEntities,
     categoryOptions: resolvedCategoryOptions,
-    colorOptions:
-      Array.isArray(colors) && colors.length > 0
-        ? colors.map((color) => color?.name).filter(Boolean)
-        : colorOptions,
     conditionOptions,
     brandOptions: Array.isArray(brands) ? brands : [],
     userSegmentOptions: Array.isArray(userSegments) ? userSegments : [],
     styleOptions: Array.isArray(styles) ? styles : [],
-    colorEntities: Array.isArray(colors) ? colors : [],
+    sizeOptions: Array.isArray(sizes) ? sizes : [],
     materialOptions: Array.isArray(materials) ? materials : [],
     madeInOptions: Array.isArray(madeIns) ? madeIns : [],
     occasionOptions: Array.isArray(occasions) ? occasions : [],
@@ -139,6 +154,30 @@ const resolveActiveSubscriptionFromList = (subscriptions = []) =>
     ? subscriptions.find((subscription) => String(subscription?.status || '').trim().toLowerCase() === 'active') || null
     : null;
 
+const mergePickupIntoList = (entry, pickup) => {
+  if (!entry || !Array.isArray(entry.data) || !pickup?.id) {
+    return entry;
+  }
+
+  const pickupId = String(pickup.id);
+  let didReplace = false;
+  const nextData = entry.data.map((existingPickup) => {
+    if (String(existingPickup?.id || '') !== pickupId) {
+      return existingPickup;
+    }
+
+    didReplace = true;
+    return pickup;
+  });
+
+  return didReplace
+    ? {
+        ...entry,
+        data: nextData,
+      }
+    : entry;
+};
+
 export const useSwapStore = create((set, get) => ({
   allSubscriptions: [],
   subscriptionsLoaded: false,
@@ -167,7 +206,7 @@ export const useSwapStore = create((set, get) => ({
       categories: state.referenceData.categories.data,
       userSegments: state.referenceData.userSegments.data,
       styles: state.referenceData.styles.data,
-      colors: state.referenceData.colors.data,
+      sizes: state.referenceData.sizes.data,
       materials: state.referenceData.materials.data,
       madeIns: state.referenceData.madeIns.data,
       occasions: state.referenceData.occasions.data,
@@ -215,18 +254,18 @@ export const useSwapStore = create((set, get) => ({
       getCategories(),
       getUserSegments(),
       getStyles(),
-      getColors(),
+      getSizes(),
       getMaterials(),
       getMadeIns(),
       getOccasions(),
     ])
-      .then(([brands, categories, userSegments, styles, colors, materials, madeIns, occasions]) => {
+      .then(([brands, categories, userSegments, styles, sizes, materials, madeIns, occasions]) => {
         const nextReferenceData = {
           brands: toLoadedEntry(brands || []),
           categories: toLoadedEntry(categories || []),
           userSegments: toLoadedEntry(userSegments || []),
           styles: toLoadedEntry(styles || []),
-          colors: toLoadedEntry(colors || []),
+          sizes: toLoadedEntry(sizes || []),
           materials: toLoadedEntry(materials || []),
           madeIns: toLoadedEntry(madeIns || []),
           occasions: toLoadedEntry(occasions || []),
@@ -292,6 +331,43 @@ export const useSwapStore = create((set, get) => ({
 
       return {
         currentCustomerData,
+      };
+    }),
+  requestPickupDetailRefresh: (pickupId, reason = 'itemAdded') =>
+    set((state) => {
+      const key = String(pickupId || '');
+      if (!key) {
+        return state;
+      }
+
+      return {
+        currentCustomerData: {
+          ...state.currentCustomerData,
+          pickupRefreshRequestsById: {
+            ...state.currentCustomerData.pickupRefreshRequestsById,
+            [key]: {
+              requestedAt: Date.now(),
+              reason,
+            },
+          },
+        },
+      };
+    }),
+  clearPickupDetailRefresh: (pickupId) =>
+    set((state) => {
+      const key = String(pickupId || '');
+      if (!key || !state.currentCustomerData.pickupRefreshRequestsById?.[key]) {
+        return state;
+      }
+
+      const nextRefreshRequests = { ...state.currentCustomerData.pickupRefreshRequestsById };
+      delete nextRefreshRequests[key];
+
+      return {
+        currentCustomerData: {
+          ...state.currentCustomerData,
+          pickupRefreshRequestsById: nextRefreshRequests,
+        },
       };
     }),
   setActiveCustomerSession: (session) => {
@@ -655,6 +731,7 @@ export const useSwapStore = create((set, get) => ({
       set((state) => ({
         currentCustomerData: {
           ...state.currentCustomerData,
+          pickups: mergePickupIntoList(state.currentCustomerData.pickups, pickup),
           pickupDetailsById: {
             ...state.currentCustomerData.pickupDetailsById,
             [key]: toLoadedEntry(pickup),

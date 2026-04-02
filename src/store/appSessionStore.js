@@ -141,7 +141,9 @@ export const useAppSessionStore = create((set, get) => ({
 
     try {
       console.log('[appSession] refreshTokens start');
-      const guestToken = await resolveGuestAuthToken();
+      // Guest tokens do not have a check-session path in this app, so bootstrap
+      // must force-refresh them before any dependent API preloads start.
+      const guestToken = await resolveGuestAuthToken({ force: true });
       console.log('[appSession] guest session ready', {
         hasGuestToken: Boolean(guestToken),
       });
@@ -219,6 +221,28 @@ export const useAppSessionStore = create((set, get) => ({
         })
         .catch((preloadError) => {
           console.log('[appSession] shop subscriptions preload failed', {
+            reason: preloadError?.message || 'unknown error',
+          });
+        });
+
+      console.log('[appSession] preloading reference data');
+      useSwapStore
+        .getState()
+        .fetchReferenceDataIfNeeded({ force: true })
+        .then((result) => {
+          console.log('[appSession] reference data preloaded', {
+            brandsCount: result?.brands?.length || 0,
+            categoriesCount: result?.categories?.length || 0,
+            userSegmentsCount: result?.userSegments?.length || 0,
+            stylesCount: result?.styles?.length || 0,
+            sizesCount: result?.sizes?.length || 0,
+            materialsCount: result?.materials?.length || 0,
+            madeInsCount: result?.madeIns?.length || 0,
+            occasionsCount: result?.occasions?.length || 0,
+          });
+        })
+        .catch((preloadError) => {
+          console.log('[appSession] reference data preload failed', {
             reason: preloadError?.message || 'unknown error',
           });
         });

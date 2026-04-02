@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { Row } from '../../components/Row';
 import { ScreenShell } from '../../components/ScreenShell';
@@ -19,9 +19,13 @@ export const CustomerPickupDetailScreen = ({ pop, push, customerEmail, pickupId 
   const { withLoader } = useLoader();
   const profileEntry = useSwapStore((state) => state.currentCustomerData.profile);
   const pickupEntry = useSwapStore((state) => state.currentCustomerData.pickupDetailsById[String(pickupId)] || null);
+  const pickupRefreshRequest = useSwapStore((state) => state.currentCustomerData.pickupRefreshRequestsById[String(pickupId)] || null);
   const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
   const fetchCustomerPickupDetailIfNeeded = useSwapStore((state) => state.fetchCustomerPickupDetailIfNeeded);
+  const clearPickupDetailRefresh = useSwapStore((state) => state.clearPickupDetailRefresh);
   const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
+  const [isItemsRefreshing, setIsItemsRefreshing] = useState(false);
+  const refreshTimeoutRef = useRef(null);
   const customer = profileEntry.data;
   const pickup = pickupEntry?.data || null;
   const error = profileEntry.error || pickupEntry?.error || '';
@@ -48,6 +52,31 @@ export const CustomerPickupDetailScreen = ({ pop, push, customerEmail, pickupId 
 
     loadData();
   }, [canUseCache, customerEmail, fetchCustomerPickupDetailIfNeeded, fetchCustomerProfileIfNeeded, pickupId, withLoader]);
+
+  useEffect(() => {
+    if (!pickupRefreshRequest?.requestedAt) {
+      return undefined;
+    }
+
+    setIsItemsRefreshing(true);
+    refreshTimeoutRef.current = setTimeout(async () => {
+      try {
+        await fetchCustomerPickupDetailIfNeeded(customerEmail, pickupId, { force: true });
+      } catch {
+        // Store entry captures request errors for rendering.
+      } finally {
+        clearPickupDetailRefresh(pickupId);
+        setIsItemsRefreshing(false);
+      }
+    }, 3000);
+
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
+    };
+  }, [clearPickupDetailRefresh, customerEmail, fetchCustomerPickupDetailIfNeeded, pickupId, pickupRefreshRequest?.requestedAt]);
 
   if (!customer || !pickup) {
     return (
@@ -79,7 +108,7 @@ export const CustomerPickupDetailScreen = ({ pop, push, customerEmail, pickupId 
         <Row label="Items Remaining" value={String(remainingItems)} />
       </View>
 
-      <SwappedInItemsSection items={pickup.items || []} />
+      <SwappedInItemsSection items={pickup.items || []} loading={isItemsRefreshing} />
 
       {remainingItems > 0 ? (
         <TouchableOpacity

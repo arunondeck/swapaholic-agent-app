@@ -557,6 +557,18 @@ export const mockOccasions = [
   { id: 'occasion-party', name: 'Party' },
   { id: 'occasion-vacation', name: 'Vacation' },
 ];
+export const mockSizes = [
+  { id: 'size-item-women-xs', name: 'XS', standard_c: 'XS', us_size_c: '2', type_c: 'item_women' },
+  { id: 'size-item-women-s', name: 'S', standard_c: 'S', us_size_c: '4', type_c: 'item_women' },
+  { id: 'size-item-women-m', name: 'M', standard_c: 'M', us_size_c: '6', type_c: 'item_women' },
+  { id: 'size-item-men-s', name: 'S', standard_c: 'S', us_size_c: '36', type_c: 'item_men' },
+  { id: 'size-item-men-m', name: 'M', standard_c: 'M', us_size_c: '38', type_c: 'item_men' },
+  { id: 'size-item-girls-6', name: '6Y', standard_c: '6Y', us_size_c: '6', type_c: 'item_girls' },
+  { id: 'size-item-boys-6', name: '6Y', standard_c: '6Y', us_size_c: '6', type_c: 'item_boys' },
+  { id: 'size-footwear-women-37', name: '37', standard_c: '37', us_size_c: '6.5', type_c: 'footwear_women' },
+  { id: 'size-footwear-men-42', name: '42', standard_c: '42', us_size_c: '8.5', type_c: 'footwear_men' },
+  { id: 'size-footwear-children-30', name: '30', standard_c: '30', us_size_c: '12', type_c: 'footwear_children' },
+];
 
 const pickupOneItems = [
   createSwapMockProduct({

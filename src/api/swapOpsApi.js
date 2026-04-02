@@ -24,6 +24,7 @@ import {
   mockMadeIns,
   mockMaterials,
   mockOccasions,
+  mockSizes,
   mockSwapProducts,
   mockStyles,
   mockUserSegments,
@@ -140,7 +141,15 @@ const getResponseError = (response) => response?.error || null;
 
 const getResponseDataList = (response, key) => {
   const data = getResponseData(response);
-  return Array.isArray(data?.[key]) ? data[key] : EMPTY_ARRAY;
+  if (Array.isArray(data?.[key])) {
+    return data[key];
+  }
+
+  if (Array.isArray(response?.[key])) {
+    return response[key];
+  }
+
+  return EMPTY_ARRAY;
 };
 
 const getResponsePrimaryRecord = (response) => {
@@ -355,12 +364,12 @@ const executeWithTokenRetry = async ({ tokenScope = '', authToken = '', callerNa
   return runRequest(authToken, false);
 };
 
-export const resolveGuestAuthToken = async () => {
-  return refreshAuthTokenForScope(TOKEN_SCOPE.GUEST);
+export const resolveGuestAuthToken = async ({ force = false } = {}) => {
+  return refreshAuthTokenForScope(TOKEN_SCOPE.GUEST, { force });
 };
 
-const resolveOperatorAuthToken = async () => {
-  return refreshAuthTokenForScope(TOKEN_SCOPE.OPERATOR);
+const resolveOperatorAuthToken = async ({ force = false } = {}) => {
+  return refreshAuthTokenForScope(TOKEN_SCOPE.OPERATOR, { force });
 };
 
 const getCustomerItemsListData = (response) => {
@@ -867,6 +876,28 @@ const logApiRequest = ({ callerName = 'unknown', method, url, payload, headers }
   });
 };
 
+const summarizeFormDataPayload = (formData) => {
+  if (!formData || typeof formData.entries !== 'function') {
+    return '[form-data]';
+  }
+
+  const fields = {};
+
+  for (const [key, value] of formData.entries()) {
+    const isFileLike =
+      value &&
+      typeof value === 'object' &&
+      (typeof value.uri === 'string' || typeof value.name === 'string' || typeof value.type === 'string');
+
+    fields[key] = isFileLike ? '[file]' : value;
+  }
+
+  return {
+    type: 'form-data',
+    fields,
+  };
+};
+
 const logApiResponse = ({ callerName = 'unknown', method, url, response, error }) => {
   if (error) {
     console.error('[swapApi] response', {
@@ -1071,7 +1102,7 @@ const postFormData = async (path, formData, withVersion = true, authToken = '', 
         callerName,
         method: 'POST',
         url,
-        payload: '[form-data]',
+        payload: summarizeFormDataPayload(formData),
         headers,
       });
       const response = await fetch(url, {
@@ -2257,24 +2288,28 @@ const getAuthenticatedTaxonomyList = async ({
   body = DEFAULT_TAXONOMY_LIST_PARAMS,
   mockData = EMPTY_ARRAY,
   callerName = 'unknown',
+  authTokenResolver = resolveOperatorAuthToken,
+  tokenScope = TOKEN_SCOPE.OPERATOR,
+  withVersion = true,
 } = {}) => {
   if (SWAP_USE_MOCK) {
     await delay();
     return mockData;
   }
 
-  const guestToken = await resolveGuestAuthToken();
+  const authToken = await authTokenResolver();
   const response = await postJson(
     path,
     body,
-    true,
+    withVersion,
     {},
-    guestToken,
+    authToken,
     callerName,
-    TOKEN_SCOPE.GUEST
+    tokenScope
   );
 
-  return getResponseDataList(response, responseKey);
+  const records = getResponseDataList(response, responseKey);
+  return records;
 };
 
 /**
@@ -2386,13 +2421,13 @@ export const getCustomerPickupDetails = async (email, pickupId) => {
   }
 
   const response = await postJson(
-    'pickups/details',
+    'v3/pickups/details',
     {
       data_tenancy: 'SWAP.PICKUP.DATA_VIEW.DETAIL_PROTECTED',
       detail_tenancy: 'SWAP.PICKUP.DETAIL_VIEW.ID',
       id: pickupId,
     },
-    true,
+    false,
     {},
     customerToken,
     'getCustomerPickupDetails',
@@ -2405,6 +2440,7 @@ export const getCustomerPickupDetails = async (email, pickupId) => {
     email,
     pickupId,
     response,
+    errorJson: response?.error ? JSON.stringify(response.error, null, 2) : '',
     hasPickup: Boolean(pickup),
   });
 
@@ -3177,8 +3213,20 @@ export const addItemToCustomerPickup = async ({ pickupId, thumbnailFile }) => {
   const formData = new FormData();
   formData.append('pickup_id_c', pickupId);
   formData.append('thumbnail_c', thumbnailFile);
+  console.log('[swapApi] addItemToCustomerPickup payload', {
+    pickupId: String(pickupId || ''),
+    thumbnailFile: thumbnailFile
+      ? {
+          uri: thumbnailFile?.uri || '',
+          name: thumbnailFile?.name || '',
+          type: thumbnailFile?.type || '',
+        }
+      : null,
+  });
 
-  return postFormData('users/customer-items/init', formData, false, '', 'addItemToCustomerPickup', TOKEN_SCOPE.OPERATOR);
+  const response = await postFormData('v3/users/customer-items/init', formData, false, '', 'addItemToCustomerPickup', TOKEN_SCOPE.OPERATOR);
+  console.log('[swapApi] addItemToCustomerPickup full response', response);
+  return response;
 };
 
 export const updateCustomerPickupItem = async ({ id, item = {} } = {}) => {
@@ -3206,7 +3254,7 @@ export const updateCustomerPickupItem = async ({ id, item = {} } = {}) => {
   }
 
   return postJson(
-    'users/customer-items/update',
+    'v3/users/customer-items/update',
     {
       id,
       update_tenancy: 'SWAP.ITEM.UPDATE.ID',
@@ -3220,13 +3268,17 @@ export const updateCustomerPickupItem = async ({ id, item = {} } = {}) => {
   );
 };
 
+/**
+ * Create and populate a customer pickup item.
+ * @param {import('../types/swapTypes').SwapAddItemRequest & { item?: Record<string, unknown> }} params
+ */
 export const createCustomerPickupItem = async ({ pickupId, thumbnailFile, item = {} } = {}) => {
   const initResponse = await addItemToCustomerPickup({
     pickupId,
     thumbnailFile,
   });
   const initializedItem = getResponsePrimaryRecord(initResponse);
-  const itemId = initializedItem?.id || getResponseData(initResponse)?.id || initResponse?.id || '';
+  const itemId = initializedItem?.id || getResponseData(initResponse)?.id || initResponse?.item?.id || initResponse?.id || '';
 
   if (!itemId) {
     throw new Error('Customer item was created but no item id was returned.');
@@ -3356,33 +3408,41 @@ export const getBrands = async () => {
     return mockBrands;
   }
 
-  const response = await postPublicJson(
+  const guestToken = await resolveGuestAuthToken();
+  const response = await postJson(
     'guests/brands/list',
     {
       bs_strict: true,
     },
     true,
     {},
-    'getBrands'
+    guestToken,
+    'getBrands',
+    TOKEN_SCOPE.GUEST
   );
 
-  return getResponseDataList(response, 'brands');
+  const brands = getResponseDataList(response, 'brands');
+  return brands;
 };
 
 export const getStyles = async () =>
   getAuthenticatedTaxonomyList({
-    path: 'users/styles/list',
+    path: 'guests/styles/list',
     responseKey: 'styles',
     mockData: mockStyles,
     callerName: 'getStyles',
+    authTokenResolver: resolveGuestAuthToken,
+    tokenScope: TOKEN_SCOPE.GUEST,
   });
 
 export const getColors = async () =>
   getAuthenticatedTaxonomyList({
-    path: 'users/colors/list',
+    path: 'guests/colors/list',
     responseKey: 'colors',
     mockData: mockColors,
     callerName: 'getColors',
+    authTokenResolver: resolveGuestAuthToken,
+    tokenScope: TOKEN_SCOPE.GUEST,
   });
 
 export const getMaterials = async () => {
@@ -3441,18 +3501,38 @@ export const getMaterials = async () => {
 
 export const getMadeIns = async () =>
   getAuthenticatedTaxonomyList({
-    path: 'users/made-ins/list',
+    path: 'v3/users/made-ins/list',
     responseKey: 'made_ins',
     mockData: mockMadeIns,
     callerName: 'getMadeIns',
+    authTokenResolver: resolveOperatorAuthToken,
+    tokenScope: TOKEN_SCOPE.OPERATOR,
+    withVersion: false,
   });
 
 export const getOccasions = async () =>
   getAuthenticatedTaxonomyList({
-    path: 'users/occasions/list',
+    path: 'v3/users/occasions/list',
     responseKey: 'occasions',
+    body: {
+      max_results: 100,
+      offset: 0,
+    },
     mockData: mockOccasions,
     callerName: 'getOccasions',
+    authTokenResolver: resolveOperatorAuthToken,
+    tokenScope: TOKEN_SCOPE.OPERATOR,
+    withVersion: false,
+  });
+
+export const getSizes = async () =>
+  getAuthenticatedTaxonomyList({
+    path: 'guests/sizes/list',
+    responseKey: 'sizes',
+    mockData: mockSizes,
+    callerName: 'getSizes',
+    authTokenResolver: resolveGuestAuthToken,
+    tokenScope: TOKEN_SCOPE.GUEST,
   });
 
 export const getCategories = async () => {
@@ -3461,15 +3541,19 @@ export const getCategories = async () => {
     return mockCategories;
   }
 
-  const response = await postPublicJson(
+  const guestToken = await resolveGuestAuthToken();
+  const response = await postJson(
     'guests/categories/list',
     {},
     true,
     {},
-    'getCategories'
+    guestToken,
+    'getCategories',
+    TOKEN_SCOPE.GUEST
   );
 
-  return getResponseDataList(response, 'categories');
+  const categories = getResponseDataList(response, 'categories');
+  return categories;
 };
 
 export const getUserSegments = async () => {
@@ -3489,19 +3573,19 @@ export const getUserSegments = async () => {
     TOKEN_SCOPE.GUEST
   );
 
-  return getResponseDataList(response, 'user_segments');
+  const userSegments = getResponseDataList(response, 'user_segments');
+  return userSegments;
 };
 
 export const getItemEntryOptions = async () => {
   await delay(0);
   return {
     categoryOptions,
-    colorOptions,
     conditionOptions,
     brandOptions: mockBrands,
     userSegmentOptions: mockUserSegments,
     styleOptions: mockStyles,
-    colorEntities: mockColors,
+    sizeOptions: mockSizes,
     materialOptions: mockMaterials,
     madeInOptions: mockMadeIns,
     occasionOptions: mockOccasions,
