@@ -205,7 +205,7 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
   );
   const defaultColorOption = useMemo(
     () =>
-      itemOptions.colorOptions?.find((option) => String(option?.name || '').trim().toLowerCase() === 'multi color') || null,
+      itemOptions.colorOptions?.find((option) => String(option?.name || '').trim().toLowerCase() === 'multi') || null,
     [itemOptions.colorOptions]
   );
   const selectedColor = useMemo(
@@ -566,7 +566,6 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
           </TouchableOpacity>
           {isMoreInfoOpen ? (
             <View style={styles.collapsibleBody}>
-              <Text style={styles.selectLabel}>Material</Text>
               <TaxonomySelect
                 taxonomyName="Material"
                 options={itemOptions.materialOptions || []}

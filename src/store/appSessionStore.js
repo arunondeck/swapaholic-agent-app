@@ -239,6 +239,7 @@ export const useAppSessionStore = create((set, get) => ({
             materialsCount: result?.materials?.length || 0,
             madeInsCount: result?.madeIns?.length || 0,
             occasionsCount: result?.occasions?.length || 0,
+            colorsCount: result?.colors?.length || 0,
           });
         })
         .catch((preloadError) => {

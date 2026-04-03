@@ -3426,30 +3426,70 @@ export const getBrands = async () => {
   return brands;
 };
 
-export const getStyles = async () =>
-  getAuthenticatedTaxonomyList({
-    path: 'v3/users/styles/list',
-    responseKey: 'styles',
-    body: {
-      max_results: 45,
-      offset: 0,
-      order_by: 'name ASC',
-    },
-    mockData: mockStyles,
-    callerName: 'getStyles',
-    authTokenResolver: resolveOperatorAuthToken,
-    tokenScope: TOKEN_SCOPE.OPERATOR,
-    withVersion: false,
-  });
+export const getStyles = async () => {
+  if (SWAP_USE_MOCK) {
+    await delay();
+    return mockStyles;
+  }
+
+  const authToken = await resolveOperatorAuthToken();
+  const styles = [];
+  const seenStyleIds = new Set();
+  let nextOffset = 0;
+
+  while (nextOffset >= 0) {
+    const response = await postJson(
+      'v3/users/styles/list',
+      {
+        max_results: 200,
+        offset: nextOffset,
+        order_by: 'name ASC',
+      },
+      false,
+      {},
+      authToken,
+      'getStyles',
+      TOKEN_SCOPE.OPERATOR
+    );
+
+    const pageStyles = Array.isArray(response?.styles) ? response.styles : EMPTY_ARRAY;
+    pageStyles.forEach((style) => {
+      const styleId = String(style?.id || '');
+      const dedupeKey = styleId || JSON.stringify(style);
+      if (!seenStyleIds.has(dedupeKey)) {
+        seenStyleIds.add(dedupeKey);
+        styles.push(style);
+      }
+    });
+
+    const resolvedNextOffset = Number(response?.next_offset);
+    if (Number.isFinite(resolvedNextOffset) && resolvedNextOffset >= 0) {
+      nextOffset = resolvedNextOffset;
+      continue;
+    }
+
+    const totalCount = Number(response?.total_count);
+    const resultCount = Number(response?.result_count);
+    if (Number.isFinite(totalCount) && styles.length < totalCount && Number.isFinite(resultCount) && resultCount > 0) {
+      nextOffset += resultCount;
+      continue;
+    }
+
+    break;
+  }
+
+  return styles;
+};
 
 export const getColors = async () =>
   getAuthenticatedTaxonomyList({
-    path: 'guests/colors/list',
+    path: 'v3/users/colors/list',
     responseKey: 'colors',
     mockData: mockColors,
     callerName: 'getColors',
-    authTokenResolver: resolveGuestAuthToken,
-    tokenScope: TOKEN_SCOPE.GUEST,
+    authTokenResolver: resolveOperatorAuthToken,
+    tokenScope: TOKEN_SCOPE.OPERATOR,
+    withVersion: false,
   });
 
 export const getMaterials = async () => {
