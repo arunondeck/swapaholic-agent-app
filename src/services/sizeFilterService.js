@@ -5,19 +5,21 @@
 const normalize = (value = '') => String(value || '').trim().toLowerCase();
 
 const FOOTWEAR_CATEGORY_KEYWORDS = ['shoe', 'shoes', 'heel', 'heels', 'sandal', 'sandals', 'boot', 'boots', 'sneaker', 'sneakers', 'loafer', 'loafers', 'slipper', 'slippers', 'footwear'];
+const BAG_CATEGORY_KEYWORDS = ['bag', 'bags', 'handbag', 'handbags', 'purse', 'purses', 'tote', 'totes', 'backpack', 'backpacks', 'satchel', 'satchels', 'clutch', 'clutches'];
 
 /**
- * @param {string} categoryName
- * @returns {'footwear' | 'item'}
+ * @param {string} input
+ * @param {string[]} keywords
+ * @returns {boolean}
  */
-const resolveSizeFamilyFromCategory = (categoryName = '') => {
-  const normalizedCategory = normalize(categoryName);
-  return FOOTWEAR_CATEGORY_KEYWORDS.some((keyword) => normalizedCategory.includes(keyword)) ? 'footwear' : 'item';
+const includesKeyword = (input = '', keywords = []) => {
+  const normalizedInput = normalize(input);
+  return keywords.some((keyword) => normalizedInput.includes(keyword));
 };
 
 /**
  * @param {string} userSegmentName
- * @returns {'women' | 'men' | 'girls' | 'boys' | 'children' | ''}
+ * @returns {'women' | 'men' | 'children' | 'unisex' | ''}
  */
 const resolveAudienceFromUserSegment = (userSegmentName = '') => {
   const normalizedSegment = normalize(userSegmentName);
@@ -30,19 +32,65 @@ const resolveAudienceFromUserSegment = (userSegmentName = '') => {
     return 'men';
   }
 
-  if (normalizedSegment.includes('girls') || normalizedSegment === 'g') {
-    return 'girls';
-  }
-
-  if (normalizedSegment.includes('boys') || normalizedSegment === 'b') {
-    return 'boys';
-  }
-
-  if (normalizedSegment.includes('child') || normalizedSegment.includes('kid')) {
+  if (
+    normalizedSegment.includes('girls') ||
+    normalizedSegment === 'g' ||
+    normalizedSegment.includes('boys') ||
+    normalizedSegment === 'b' ||
+    normalizedSegment.includes('child') ||
+    normalizedSegment.includes('kid')
+  ) {
     return 'children';
   }
 
+  if (normalizedSegment.includes('unisex') || normalizedSegment === 'u') {
+    return 'unisex';
+  }
+
   return '';
+};
+
+/**
+ * @param {string} categoryName
+ * @param {string} audience
+ * @returns {string[]}
+ */
+const resolveAllowedTypes = (categoryName = '', audience = '') => {
+  if (includesKeyword(categoryName, BAG_CATEGORY_KEYWORDS)) {
+    return ['bag'];
+  }
+
+  if (includesKeyword(categoryName, FOOTWEAR_CATEGORY_KEYWORDS)) {
+    if (audience === 'women') {
+      return ['footwear_women'];
+    }
+
+    if (audience === 'men') {
+      return ['footwear_men'];
+    }
+
+    if (audience === 'children') {
+      return ['footwear_children'];
+    }
+  }
+
+  if (audience === 'women') {
+    return ['item_women'];
+  }
+
+  if (audience === 'men') {
+    return ['item_men'];
+  }
+
+  if (audience === 'children') {
+    return ['item_children'];
+  }
+
+  if (audience === 'unisex') {
+    return ['unisex', ''];
+  }
+
+  return [];
 };
 
 /**
@@ -54,19 +102,15 @@ const resolveAudienceFromUserSegment = (userSegmentName = '') => {
  * @returns {import('../types/swapTypes').SwapSize[]}
  */
 export const filterSizesByTaxonomy = ({ sizes = [], categoryName = '', userSegmentName = '' } = {}) => {
-  const family = resolveSizeFamilyFromCategory(categoryName);
   const audience = resolveAudienceFromUserSegment(userSegmentName);
+  const allowedTypes = resolveAllowedTypes(categoryName, audience);
 
-  if (!Array.isArray(sizes) || !audience) {
+  if (!Array.isArray(sizes) || !allowedTypes.length) {
     return [];
   }
 
-  const exactType = `${family}_${audience}`;
-  const fallbackChildrenType = family === 'footwear' && (audience === 'girls' || audience === 'boys') ? `${family}_children` : '';
-
   return sizes.filter((size) => {
     const type = normalize(size?.type_c || '');
-    return type === exactType || (fallbackChildrenType ? type === fallbackChildrenType : false);
+    return allowedTypes.includes(type);
   });
 };
-
