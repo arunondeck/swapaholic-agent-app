@@ -41,7 +41,8 @@
  *   conditionOptions: string[],
  *   brandOptions: SwapBrandOption[],
  *   userSegmentOptions: SwapTaxonomyOption[],
- *   styleOptions?: SwapTaxonomyOption[],
+ *   colorOptions?: SwapColor[],
+ *   styleOptions?: SwapStyle[],
  *   sizeOptions?: SwapSize[],
  *   materialOptions?: SwapTaxonomyOption[],
  *   madeInOptions?: SwapTaxonomyOption[],
@@ -54,7 +55,7 @@
  */
 
 /**
- * @typedef {SwapNamedEntity & {code_c?: string}} SwapStyle
+ * @typedef {SwapNamedEntity & {code_c?: string, status_c?: string, category_id_c?: string}} SwapStyle
  */
 
 /**

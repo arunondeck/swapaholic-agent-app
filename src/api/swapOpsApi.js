@@ -701,6 +701,7 @@ const mapApiPickupCustomerItemToProduct = (item, pickup, customer) => ({
 });
 
 const mapApiPickupToPickup = (pickup) => ({
+  ...pickup,
   id: pickup?.id || pickup?.pickup_id_c || '',
   subscriptionId: pickup?.subscribe_id_c || pickup?.subscription_id_c || '',
   date: pickup?.trip_date_c || pickup?.date_entered || pickup?.pickup_date_c || 'NA',
@@ -3427,12 +3428,18 @@ export const getBrands = async () => {
 
 export const getStyles = async () =>
   getAuthenticatedTaxonomyList({
-    path: 'guests/styles/list',
+    path: 'v3/users/styles/list',
     responseKey: 'styles',
+    body: {
+      max_results: 45,
+      offset: 0,
+      order_by: 'name ASC',
+    },
     mockData: mockStyles,
     callerName: 'getStyles',
-    authTokenResolver: resolveGuestAuthToken,
-    tokenScope: TOKEN_SCOPE.GUEST,
+    authTokenResolver: resolveOperatorAuthToken,
+    tokenScope: TOKEN_SCOPE.OPERATOR,
+    withVersion: false,
   });
 
 export const getColors = async () =>

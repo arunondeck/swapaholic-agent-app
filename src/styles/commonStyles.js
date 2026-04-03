@@ -278,6 +278,7 @@ export const styles = StyleSheet.create({
   tabButtonText: { fontSize: 14, fontWeight: '700', color: '#0f172a', textAlign: 'center' },
   tabButtonTextActive: { color: '#fff' },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#0f172a', marginBottom: 2 },
+  sectionSubtitle: { fontSize: 12, color: '#64748b', marginBottom: 4 },
   profileHeader: {
     backgroundColor: '#fff',
     borderRadius: 14,
@@ -356,6 +357,23 @@ export const styles = StyleSheet.create({
   },
   subscriptionStatusExpired: {
     color: '#b91c1c',
+  },
+  pickupSection: {
+    gap: 2,
+  },
+  pickupStatusText: {
+    color: '#166534',
+  },
+  pickupRemainingValue: {
+    color: '#16a34a',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  pickupRemainingLabelActive: {
+    color: '#16a34a',
+  },
+  pickupRemainingValueInactive: {
+    color: '#111827',
   },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   rowLabel: { color: '#6b7280', fontSize: 12, textTransform: 'uppercase' },

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import {
   getAllSubscriptions,
   getBrands,
+  getColors,
   getCustomerCheckoutCart,
   getCategories,
   getCustomerOrderDetails,
@@ -59,6 +60,7 @@ const createReferenceDataCache = () => ({
   brands: createCacheEntry([]),
   categories: createCacheEntry([]),
   userSegments: createCacheEntry([]),
+  colors: createCacheEntry([]),
   styles: createCacheEntry([]),
   sizes: createCacheEntry([]),
   materials: createCacheEntry([]),
@@ -66,12 +68,13 @@ const createReferenceDataCache = () => ({
   occasions: createCacheEntry([]),
 });
 
-const REFERENCE_DATA_KEYS = ['brands', 'categories', 'userSegments', 'styles', 'sizes', 'materials', 'madeIns', 'occasions'];
+const REFERENCE_DATA_KEYS = ['brands', 'categories', 'userSegments', 'colors', 'styles', 'sizes', 'materials', 'madeIns', 'occasions'];
 
 const createItemEntryOptions = ({
   categories = [],
   brands = [],
   userSegments = [],
+  colors = [],
   styles = [],
   sizes = [],
   materials = [],
@@ -111,6 +114,7 @@ const createItemEntryOptions = ({
     conditionOptions,
     brandOptions: Array.isArray(brands) ? brands : [],
     userSegmentOptions: Array.isArray(userSegments) ? userSegments : [],
+    colorOptions: Array.isArray(colors) ? colors : [],
     styleOptions: Array.isArray(styles) ? styles : [],
     sizeOptions: Array.isArray(sizes) ? sizes : [],
     materialOptions: Array.isArray(materials) ? materials : [],
@@ -205,6 +209,7 @@ export const useSwapStore = create((set, get) => ({
       brands: state.referenceData.brands.data,
       categories: state.referenceData.categories.data,
       userSegments: state.referenceData.userSegments.data,
+      colors: state.referenceData.colors.data,
       styles: state.referenceData.styles.data,
       sizes: state.referenceData.sizes.data,
       materials: state.referenceData.materials.data,
@@ -253,17 +258,19 @@ export const useSwapStore = create((set, get) => ({
       getBrands(),
       getCategories(),
       getUserSegments(),
+      getColors(),
       getStyles(),
       getSizes(),
       getMaterials(),
       getMadeIns(),
       getOccasions(),
     ])
-      .then(([brands, categories, userSegments, styles, sizes, materials, madeIns, occasions]) => {
+      .then(([brands, categories, userSegments, colors, styles, sizes, materials, madeIns, occasions]) => {
         const nextReferenceData = {
           brands: toLoadedEntry(brands || []),
           categories: toLoadedEntry(categories || []),
           userSegments: toLoadedEntry(userSegments || []),
+          colors: toLoadedEntry(colors || []),
           styles: toLoadedEntry(styles || []),
           sizes: toLoadedEntry(sizes || []),
           materials: toLoadedEntry(materials || []),

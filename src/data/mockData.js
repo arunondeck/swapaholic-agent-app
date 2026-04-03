@@ -460,7 +460,7 @@ export const categoryOptions = {
   Skirt: ['Mini Skirt', 'Midi Skirt', 'Pleated Skirt'],
 };
 
-export const colorOptions = ['Black', 'White', 'Blue', 'Green', 'Pink', 'Beige'];
+export const colorOptions = ['Multi Color', 'Black', 'White', 'Blue', 'Green', 'Pink', 'Beige'];
 export const conditionOptions = ['New', 'Gently Used', 'Slight Damage'];
 export const mockBrands = [
   {
@@ -519,19 +519,19 @@ export const mockUserSegments = [
   },
 ];
 export const mockStyles = [
-  { id: 'style-tshirt', name: 'T-Shirt', status_c: 'active' },
-  { id: 'style-shirt', name: 'Shirt', status_c: 'active' },
-  { id: 'style-blouse', name: 'Blouse', status_c: 'active' },
-  { id: 'style-tank', name: 'Tank', status_c: 'active' },
-  { id: 'style-mini-dress', name: 'Mini Dress', status_c: 'active' },
-  { id: 'style-midi-dress', name: 'Midi Dress', status_c: 'active' },
-  { id: 'style-maxi-dress', name: 'Maxi Dress', status_c: 'active' },
-  { id: 'style-denim-shorts', name: 'Denim Shorts', status_c: 'active' },
-  { id: 'style-tailored-shorts', name: 'Tailored Shorts', status_c: 'active' },
-  { id: 'style-casual-shorts', name: 'Casual Shorts', status_c: 'active' },
-  { id: 'style-mini-skirt', name: 'Mini Skirt', status_c: 'active' },
-  { id: 'style-midi-skirt', name: 'Midi Skirt', status_c: 'active' },
-  { id: 'style-pleated-skirt', name: 'Pleated Skirt', status_c: 'active' },
+  { id: 'style-tshirt', name: 'T-Shirt', status_c: 'active', category_id_c: 'mock-category-1' },
+  { id: 'style-shirt', name: 'Shirt', status_c: 'active', category_id_c: 'mock-category-1' },
+  { id: 'style-blouse', name: 'Blouse', status_c: 'active', category_id_c: 'mock-category-1' },
+  { id: 'style-tank', name: 'Tank', status_c: 'active', category_id_c: 'mock-category-1' },
+  { id: 'style-mini-dress', name: 'Mini Dress', status_c: 'active', category_id_c: 'mock-category-2' },
+  { id: 'style-midi-dress', name: 'Midi Dress', status_c: 'active', category_id_c: 'mock-category-2' },
+  { id: 'style-maxi-dress', name: 'Maxi Dress', status_c: 'active', category_id_c: 'mock-category-2' },
+  { id: 'style-denim-shorts', name: 'Denim Shorts', status_c: 'active', category_id_c: 'mock-category-3' },
+  { id: 'style-tailored-shorts', name: 'Tailored Shorts', status_c: 'active', category_id_c: 'mock-category-3' },
+  { id: 'style-casual-shorts', name: 'Casual Shorts', status_c: 'active', category_id_c: 'mock-category-3' },
+  { id: 'style-mini-skirt', name: 'Mini Skirt', status_c: 'active', category_id_c: 'mock-category-4' },
+  { id: 'style-midi-skirt', name: 'Midi Skirt', status_c: 'active', category_id_c: 'mock-category-4' },
+  { id: 'style-pleated-skirt', name: 'Pleated Skirt', status_c: 'active', category_id_c: 'mock-category-4' },
 ];
 export const mockColors = colorOptions.map((name, index) => ({
   id: `mock-color-${index + 1}`,

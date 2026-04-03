@@ -7,6 +7,7 @@ import { createCustomerPickupItem } from '../../api/swapOpsApi';
 import { ScreenShell } from '../../components/ScreenShell';
 import { TaxonomySelect } from '../../components/TaxonomySelect';
 import { filterSizesByTaxonomy } from '../../services/sizeFilterService';
+import { filterStylesByCategory } from '../../services/styleFilterService';
 import { useLoader } from '../../utils/LoaderContextShared';
 import { useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
@@ -50,6 +51,7 @@ const INITIAL_ITEM_OPTIONS = {
   conditionOptions: [],
   brandOptions: [],
   userSegmentOptions: [],
+  colorOptions: [],
   styleOptions: [],
   sizeOptions: [],
   materialOptions: [],
@@ -80,6 +82,8 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
   const [size, setSize] = useState('');
   const [materialId, setMaterialId] = useState('');
   const [material, setMaterial] = useState('');
+  const [colorId, setColorId] = useState('');
+  const [styleId, setStyleId] = useState('');
   const [condition, setCondition] = useState('');
   const [damage, setDamage] = useState('');
   const [userSegmentId, setUserSegmentId] = useState('');
@@ -160,6 +164,8 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
         setCondition(options.conditionOptions[0] || '');
         setMaterialId('');
         setMaterial('');
+        setColorId('');
+        setStyleId('');
         setOccasionId('');
         setMadeInId('');
         setUserSegmentId('');
@@ -197,6 +203,19 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
     () => itemOptions.materialOptions?.find((option) => option.id === materialId) || null,
     [materialId, itemOptions.materialOptions]
   );
+  const defaultColorOption = useMemo(
+    () =>
+      itemOptions.colorOptions?.find((option) => String(option?.name || '').trim().toLowerCase() === 'multi color') || null,
+    [itemOptions.colorOptions]
+  );
+  const selectedColor = useMemo(
+    () => itemOptions.colorOptions?.find((option) => option.id === colorId) || null,
+    [colorId, itemOptions.colorOptions]
+  );
+  const selectedStyle = useMemo(
+    () => itemOptions.styleOptions?.find((option) => option.id === styleId) || null,
+    [itemOptions.styleOptions, styleId]
+  );
   const selectedSize = useMemo(
     () => itemOptions.sizeOptions?.find((option) => option.id === sizeId) || null,
     [itemOptions.sizeOptions, sizeId]
@@ -208,6 +227,14 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
   const selectedUserSegment = useMemo(
     () => itemOptions.userSegmentOptions?.find((option) => option.id === userSegmentId) || null,
     [itemOptions.userSegmentOptions, userSegmentId]
+  );
+  const filteredStyleOptions = useMemo(
+    () =>
+      filterStylesByCategory({
+        styles: itemOptions.styleOptions || [],
+        categoryId,
+      }),
+    [categoryId, itemOptions.styleOptions]
   );
   const filteredSizeOptions = useMemo(
     () =>
@@ -234,6 +261,7 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
     const nextCategoryName = nextCategoryOption?.name || '';
     setCategoryId(nextCategoryOption?.id || '');
     setCategory(nextCategoryName);
+    setStyleId('');
     setSizeId('');
     setSize('');
   };
@@ -389,6 +417,15 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
     if (selectedMaterial?.id) {
       payload.material_id_c = selectedMaterial.id;
     }
+    if (selectedColor?.id) {
+      payload.color_id_c = selectedColor.id;
+    }
+    if (!payload.color_id_c && defaultColorOption?.id) {
+      payload.color_id_c = defaultColorOption.id;
+    }
+    if (selectedStyle?.id) {
+      payload.style_id_c = selectedStyle.id;
+    }
     if (madeInId) {
       payload.made_in_id_c = madeInId;
     }
@@ -500,6 +537,14 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
           />
 
           <TaxonomySelect
+            taxonomyName="Style"
+            options={filteredStyleOptions}
+            selectedId={styleId}
+            searchable
+            onSelect={setStyleId}
+          />
+
+          <TaxonomySelect
             taxonomyName="Occasion"
             options={itemOptions.occasionOptions || []}
             selectedId={occasionId}
@@ -534,6 +579,14 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
                 options={itemOptions.madeInOptions || []}
                 selectedId={madeInId}
                 onSelect={setMadeInId}
+              />
+
+              <TaxonomySelect
+                taxonomyName="Color"
+                options={itemOptions.colorOptions || []}
+                selectedId={colorId}
+                searchable
+                onSelect={setColorId}
               />
 
               <Text style={styles.selectLabel}>Condition</Text>
@@ -580,6 +633,8 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
           <Text style={styles.sectionTitle}>Entered Item</Text>
           <Text style={styles.itemMeta}>Item ID: {savedItemId || 'NA'}</Text>
           <Text style={styles.itemMeta}>{selectedBrand?.name || brand} | {category}</Text>
+          <Text style={styles.itemMeta}>Color: {selectedColor?.name || defaultColorOption?.name || 'NA'}</Text>
+          <Text style={styles.itemMeta}>Style: {selectedStyle?.name || 'NA'}</Text>
           <Text style={styles.itemMeta}>Occasion: {selectedOccasion?.name || 'NA'} | User Segment: {selectedUserSegment?.name || 'NA'}</Text>
           <Text style={styles.itemMeta}>Size: {selectedSize?.name || size || 'NA'}</Text>
           <Text style={styles.itemMeta}>Material: {material || 'NA'}</Text>

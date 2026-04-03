@@ -165,6 +165,19 @@ When `EXPO_PUBLIC_SWAP_USE_MOCK=true`, all supported API methods return local mo
 }
 ```
 
+### 9) Get styles taxonomy
+- Function: `getStyles()`
+- Endpoint: `POST /{api_ver}/users/styles/list`
+- Auth: app user token
+- Body:
+```json
+{
+  "max_results": 45,
+  "offset": 0,
+  "order_by": "name ASC"
+}
+```
+
 ---
 
 ## Notes
