@@ -5,6 +5,7 @@ import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../utils/LoaderContextShared';
 import { buildCustomerUnreviewedItemsCacheKey, useSwapStore } from '../../store/swapStore';
 import { styles } from '../../styles/commonStyles';
+import { formatPickupDate, getPickupCreatedAtTimestamp, getPickupRemainingItems } from '../../utils/pickupDisplay';
 import { getSubscriptionKind } from '../../utils/subscriptionDisplay';
 
 const getPendingReviewItems = (response) => {
@@ -156,18 +157,33 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
 
   const activeSubscriptionFallback =
     subscriptions.find((entry) => String(entry?.status || '').trim().toLowerCase() === 'active') || null;
+  /** @type {import('../../types/swapTypes').SwapSubscription | null} */
   const currentSubscription = activeSubscription || activeSubscriptionFallback || null;
-  const itemsSwappedInSummary = useMemo(() => {
-    const acceptedItems = Number.parseInt(
-      String(currentSubscription?.acceptedItems ?? 0),
-      10
-    ) || 0;
-    const totalItems = Number.parseInt(
-      String(currentSubscription?.numberOfItems ?? 0),
-      10
-    ) || 0;
-    return `${acceptedItems}/${totalItems}`;
-  }, [currentSubscription]);
+  const openPickupsSummary = useMemo(() => {
+    const openPickups = [...pickups]
+      .filter((pickup) => getPickupRemainingItems(pickup) > 0)
+      .sort((left, right) => getPickupCreatedAtTimestamp(left) - getPickupCreatedAtTimestamp(right));
+
+    const totals = openPickups.reduce(
+      (summary, pickup) => {
+        const itemsAdded = Array.isArray(pickup?.items) ? pickup.items.length : 0;
+        const pickupTotal = Number.parseInt(
+          String(pickup?.totalItems ?? pickup?.number_of_items_c ?? 0),
+          10
+        ) || 0;
+
+        summary.itemsAdded += itemsAdded;
+        summary.totalAllowed += pickupTotal;
+        return summary;
+      },
+      { itemsAdded: 0, totalAllowed: 0 }
+    );
+
+    return {
+      itemsSwappedInSummary: `${totals.itemsAdded}/${totals.totalAllowed}`,
+      openPickups,
+    };
+  }, [pickups]);
 
   if (!customer) {
     return (
@@ -198,7 +214,7 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   const displayedPackageSubtitle = isCurrentSubscriptionExpired
     ? 'Expired'
     : hasActiveShopSubscribe && currentSubscription
-      ? `${currentSubscription.status} | Renews ${currentSubscription.renewalDate || 'NA'}`
+      ? `${currentSubscription.status} | Expiry: ${currentSubscription.renewalDate || 'NA'}`
       : '';
   const canOpenLatestPackage = Boolean(displayedPackageName && latestSubscriptionId);
 
@@ -275,8 +291,27 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
         <View style={[styles.overviewTableRow, styles.overviewTableRowBorder]}>
           <View style={styles.overviewTableCell}>
             <Text style={styles.overviewTableLabel}>Items Swapped In</Text>
-            <Text style={styles.overviewTableValue}>{itemsSwappedInSummary}</Text>
-            <Text style={styles.overviewTableHint}>Accepted items / package total</Text>
+            <Text style={styles.overviewTableValue}>{openPickupsSummary.itemsSwappedInSummary}</Text>
+            <Text style={styles.overviewTableHint}>Items added / open pickup total</Text>
+            {openPickupsSummary.openPickups.map((pickup) => {
+              const itemsAdded = Array.isArray(pickup?.items) ? pickup.items.length : 0;
+              const pickupTotal = Number.parseInt(
+                String(pickup?.totalItems ?? pickup?.number_of_items_c ?? 0),
+                10
+              ) || 0;
+
+              return (
+                <TouchableOpacity
+                  key={pickup.id || `${pickup.date}-${pickup.subscriptionId}`}
+                  activeOpacity={0.8}
+                  onPress={() => push('customerPickupDetail', { email: customer.email, pickupId: pickup.id })}
+                >
+                  <Text style={[styles.overviewTableHint, styles.overviewTableLinkValue]}>
+                    {`${itemsAdded}/${pickupTotal} items in pickup ${formatPickupDate(pickup)}`}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       </View>
