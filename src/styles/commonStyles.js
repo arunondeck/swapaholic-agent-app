@@ -662,121 +662,76 @@ export const styles = StyleSheet.create({
   selectField: {
     gap: 8,
     position: 'relative',
-    zIndex: 1,
   },
-  selectFieldOpen: {
-    zIndex: 200,
-    elevation: 30,
-  },
-  selectTrigger: {
-    backgroundColor: '#fff',
+  taxonomyDropdown: {
+    height: 48,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#d1d5db',
+    backgroundColor: '#ffffff',
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  selectTriggerActive: {
+  taxonomyDropdownFocused: {
     borderColor: '#0f766e',
     backgroundColor: '#f0fdfa',
   },
-  selectTriggerValue: {
-    flex: 1,
-    color: '#111827',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  selectTriggerPlaceholder: {
-    color: '#94a3b8',
-    fontWeight: '500',
-  },
-  selectTriggerIcon: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '700',
-    marginLeft: 12,
-    textTransform: 'uppercase',
-  },
-  dropdownMenu: {
-    position: 'absolute',
-    top: 62,
-    left: 0,
-    right: 0,
+  taxonomyDropdownContainer: {
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#d1d5db',
     backgroundColor: '#ffffff',
     overflow: 'hidden',
-    maxHeight: 260,
-    elevation: 30,
-    shadowColor: '#000000',
-    shadowOpacity: 0.16,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 4 },
-    zIndex: 300,
   },
-  dropdownBackdrop: {
-    position: 'absolute',
-    top: -2000,
-    right: -2000,
-    bottom: -2000,
-    left: -2000,
-    zIndex: 250,
+  taxonomyDropdownPlaceholder: {
+    color: '#94a3b8',
+    fontSize: 14,
+    fontWeight: '500',
   },
-  dropdownSearchWrap: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: '#ffffff',
+  taxonomyDropdownSelectedText: {
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '600',
   },
-  dropdownSearchInput: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  taxonomyDropdownSearchInput: {
+    // height: 44,
     color: '#0f172a',
     fontSize: 14,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    // borderWidth: 1,
+    borderColor: '#d1d5db',
+    // margin: 8,
+    paddingHorizontal: 12,
   },
-  dropdownScrollContent: {
-    paddingVertical: 0,
+  taxonomyDropdownItemContainer:{
+    paddingVertical: 2,
+    paddingHorizontal: 12,
   },
-  dropdownOptionButton: {
-    borderRadius: 0,
-    borderWidth: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+  taxonomyDropdownItem: {
     backgroundColor: '#ffffff',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderBottomWidth: 1,
+    borderBottomColor: '#d1d5db',
   },
-  dropdownOptionButtonLast: {
-    borderBottomWidth: 0,
-  },
-  dropdownOptionButtonActive: {
+  taxonomyDropdownItemSelected: {
     backgroundColor: '#f8fafc',
   },
-  dropdownOptionText: {
+  taxonomyDropdownItemText: {
     fontSize: 14,
     fontWeight: '500',
     color: '#0f172a',
   },
-  dropdownOptionTextActive: {
+  taxonomyDropdownItemTextSelected: {
     color: '#0f766e',
     fontWeight: '700',
   },
-  dropdownEmptyState: {
-    paddingHorizontal: 14,
-    paddingVertical: 16,
-  },
-  dropdownEmptyText: {
-    fontSize: 14,
+  taxonomyDropdownIcon: {
     color: '#64748b',
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 12,
+    textTransform: 'uppercase',
   },
   buttonGroupRow: {
     flexDirection: 'row',
