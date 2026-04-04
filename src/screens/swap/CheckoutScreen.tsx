@@ -367,10 +367,10 @@ export const CheckoutScreen = ({ push, pop, customerEmail, mode = 'nonCustomer' 
           <Text style={styles.rowLabel}>Total</Text>
           <Text style={styles.rowValue}>{cartTotal} pts</Text>
         </View>
-        {/* <View style={styles.row}>
+        <View style={styles.row}>
           <Text style={styles.rowLabel}>Available</Text>
           <Text style={styles.rowValue}>{isCustomerMode ? `${availablePoints} pts` : '0 pts'}</Text>
-        </View> */}
+        </View>
         {cashPayable > 0 ? (
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Cash Payable</Text>

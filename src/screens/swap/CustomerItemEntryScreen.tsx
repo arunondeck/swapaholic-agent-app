@@ -449,6 +449,8 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
     if (madeInId) {
       payload.made_in_id_c = madeInId;
     }
+    payload.sub_status_c = 'published';
+    payload.available_c = 'yes';
 
     try {
       setSubmitting(true);
