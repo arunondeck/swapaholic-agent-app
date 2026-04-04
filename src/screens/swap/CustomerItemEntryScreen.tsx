@@ -526,10 +526,7 @@ export const CustomerItemEntryScreen = ({ pop, customerEmail, sourceType, source
         ) : null}
 
         <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>Taxonomy</Text>
-          <Text style={styles.helperText}>
-            Category count: {debugCounts.categories} | User segment count: {debugCounts.userSegments}
-          </Text>
+          <Text style={styles.sectionTitle}>Product Attributes</Text>
 
           <TaxonomySelect
             taxonomyName="Category"
