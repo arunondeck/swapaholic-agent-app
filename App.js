@@ -41,7 +41,7 @@ import { useAppSessionStore } from './src/store/appSessionStore';
 import { useSwapStore } from './src/store/swapStore';
 import { styles } from './src/styles/commonStyles';
 
-const SPLASH_MIN_DURATION_MS = 60000;
+const SPLASH_MIN_DURATION_MS = 3000;
 const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || appConfig.expo?.name || 'Swapaholic';
 const APP_VERSION = appConfig.expo?.version || '0.0.1';
 const APP_LOGO = require('./src/images/swapaholic-logo-with-quote.png');
