@@ -82,7 +82,7 @@ const resolveShopOperatorSession = async (storedToken = '', storedCustomerId = '
   };
 };
 
-export const useAppSessionStore = create((set, get) => ({
+export const useAppSessionStore = create<any>((set, get) => ({
   hydrated: false,
   checkingSession: false,
   loading: false,

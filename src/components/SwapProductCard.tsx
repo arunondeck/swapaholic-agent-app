@@ -1,6 +1,8 @@
 import React from 'react';
+import type { ReactNode } from 'react';
 import { Image, Text, View } from 'react-native';
 import { styles } from '../styles/commonStyles';
+import type { SwapProduct } from '../types/swapTypes';
 
 const DEFAULT_THUMBNAIL = 'https://placehold.co/120x120/png?text=Product';
 
@@ -16,19 +18,14 @@ const readName = (value, fallback = 'NA') => {
   return fallback;
 };
 
-/**
- * @typedef {Object} SwapProductCardProps
- * @property {import('../types/swapTypes').SwapProduct} product
- * @property {string} [subtitle]
- * @property {React.ReactNode} [footer]
- * @property {React.ReactNode} [children]
- */
+interface SwapProductCardProps {
+  product: SwapProduct;
+  subtitle?: string;
+  footer?: ReactNode;
+  children?: ReactNode;
+}
 
-/**
- * @param {SwapProductCardProps} props
- */
-export const SwapProductCard
- = ({ product, subtitle, footer, children }) => {
+export const SwapProductCard = ({ product, subtitle, footer, children }: SwapProductCardProps) => {
   const thumbnail =
     product?.thumbnail ||
     product?.image ||

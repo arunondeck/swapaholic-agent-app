@@ -12,19 +12,19 @@ const MODES = [
   {
     key: 'swap',
     title: 'Swap',
-    // subtitle: 'Customer login, pickups, subscriptions, and checkout',
+    subtitle: '',
     icon: SWAP_ICON,
   },
   {
     key: 'booth',
     title: 'Marketplace Booth',
-    // subtitle: 'Booth approvals, POS, and seller operations',
+    subtitle: '',
     icon: BOOTH_ICON,
   },
   {
     key: 'ops',
     title: 'Ops Mode',
-    // subtitle: 'Reports, products, customers, and subscriptions',
+    subtitle: '',
     icon: OPS_ICON,
   },
 ];

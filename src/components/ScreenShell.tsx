@@ -1,7 +1,21 @@
 import React from 'react';
+import type { ReactNode } from 'react';
 import { SafeAreaView, ScrollView, StatusBar, Text, TouchableOpacity, View } from 'react-native';
 import { useAppNavigation } from '../navigation/AppNavigationContext';
 import { styles } from '../styles/commonStyles';
+import type { StatusBarStyle, StyleProp, ViewStyle } from 'react-native';
+
+interface ScreenShellProps {
+  title?: ReactNode;
+  subtitle?: ReactNode;
+  onBack?: () => void;
+  children?: ReactNode;
+  backgroundColor?: string;
+  headerContent?: ReactNode;
+  headerStyle?: StyleProp<ViewStyle>;
+  contentContainerStyle?: StyleProp<ViewStyle>;
+  statusBarStyle?: StatusBarStyle;
+}
 
 export const ScreenShell = ({
   title,
@@ -13,7 +27,7 @@ export const ScreenShell = ({
   headerStyle,
   contentContainerStyle,
   statusBarStyle = 'dark-content',
-}) => {
+}: ScreenShellProps) => {
   const topInset = StatusBar.currentHeight || 0;
   const { currentRoute, currentModeHomeRoute, goToModeHome } = useAppNavigation();
   const showHomeButton = false;//Boolean(currentModeHomeRoute && currentRoute !== 'home' && currentRoute !== currentModeHomeRoute);

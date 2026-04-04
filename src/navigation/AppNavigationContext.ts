@@ -1,8 +1,9 @@
 import React, { createContext, useContext } from 'react';
+import type { AppNavigationContextValue } from '../types/navigation';
 
 const noop = () => {};
 
-const AppNavigationContext = createContext({
+const AppNavigationContext = createContext<AppNavigationContextValue>({
   currentRoute: 'home',
   currentModeHomeRoute: null,
   goToModeHome: noop,

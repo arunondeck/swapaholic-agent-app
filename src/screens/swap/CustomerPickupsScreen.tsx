@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useEffect, useMemo } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { Row } from '../../components/Row';

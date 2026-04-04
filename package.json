@@ -27,6 +27,10 @@
     "react-native": "0.81.5",
     "react-native-element-dropdown": "^2.12.4",
     "react-native-web": "^0.21.0",
+    "typescript": "^6.0.2",
     "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14"
   }
 }

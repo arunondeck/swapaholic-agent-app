@@ -182,7 +182,7 @@ const mergePickupIntoList = (entry, pickup) => {
     : entry;
 };
 
-export const useSwapStore = create((set, get) => ({
+export const useSwapStore = create<any>((set, get) => ({
   allSubscriptions: [],
   subscriptionsLoaded: false,
   subscriptionsLoading: false,

@@ -1208,4 +1208,4 @@ export const styles = StyleSheet.create({
   checkoutListItemLast: {
     borderBottomWidth: 0,
   },
-});
+}) as Record<string, any>;

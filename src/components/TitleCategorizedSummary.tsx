@@ -1,4 +1,5 @@
 import React from 'react';
+import type { ReactNode } from 'react';
 import { Text, View } from 'react-native';
 import { styles } from '../styles/commonStyles';
 
@@ -7,12 +8,19 @@ const HEADER_BACKGROUNDS = {
   marketplace: 'rgba(255, 102, 101, 0.24)',
 };
 
+interface TitleCategorizedSummaryProps {
+  title: ReactNode;
+  data: Record<string, ReactNode>;
+  variant?: keyof typeof HEADER_BACKGROUNDS;
+  headerBackgroundColor?: string;
+}
+
 export const TitleCategorizedSummary = ({
   title,
   data,
   variant = 'swap',
   headerBackgroundColor = HEADER_BACKGROUNDS[variant] || HEADER_BACKGROUNDS.swap,
-}) => (
+}: TitleCategorizedSummaryProps) => (
   <View style={[styles.titleCategorizedSummary, variant === 'marketplace' && styles.titleCategorizedSummaryMarketplace]}>
     <View style={[styles.titleCategorizedSummaryHeader, { backgroundColor: headerBackgroundColor }]}>
       <Text style={[styles.titleCategorizedSummaryTitle, variant === 'marketplace' && styles.titleCategorizedSummaryTitleMarketplace]}>{title}</Text>

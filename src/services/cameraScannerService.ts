@@ -1,4 +1,4 @@
-export const DEFAULT_CAMERA_BARCODE_TYPES = ['qr', 'code128', 'code39', 'code93', 'codabar'];
+export const DEFAULT_CAMERA_BARCODE_TYPES = ['qr', 'code128', 'code39', 'code93', 'codabar'] as const;
 
 const parseIdFromQueryString = (payload = '') => {
   const queryMatch = String(payload).match(/[?&](?:itemId|productId|id)=([^&#]+)/i);

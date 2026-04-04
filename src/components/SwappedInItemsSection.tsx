@@ -2,11 +2,15 @@ import React from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { SwapProductCard } from './SwapProductCard';
 import { styles } from '../styles/commonStyles';
+import type { SwapProduct } from '../types/swapTypes';
 
-/**
- * @param {{ items: import('../types/swapTypes').SwapProduct[], title?: string, loading?: boolean }} props
- */
-export const SwappedInItemsSection = ({ items = [], title = 'Items Swapped In', loading = false }) => (
+interface SwappedInItemsSectionProps {
+  items?: SwapProduct[];
+  title?: string;
+  loading?: boolean;
+}
+
+export const SwappedInItemsSection = ({ items = [], title = 'Items Swapped In', loading = false }: SwappedInItemsSectionProps) => (
   <>
     <Text style={styles.sectionTitle}>{title}</Text>
     {loading ? (
