@@ -1,116 +1,52 @@
-import React, { useState } from 'react';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { Card } from '../components/Card';
-import { OpsSummary } from '../components/OpsSummary';
+import React from 'react';
+import { Image, Text, TouchableOpacity, View } from 'react-native';
 import { ScreenShell } from '../components/ScreenShell';
 import { styles } from '../styles/commonStyles';
 
-const modeTabs = [
-  { key: 'booth', label: 'Booth' },
-  { key: 'swap', label: 'Swap' },
-  { key: 'ops', label: 'Ops' },
+const SWAPAHOLIC_LOGO = require('../images/swapaholic-logo.webp');
+const SWAP_ICON = require('../images/swap-icon.png');
+const BOOTH_ICON = require('../images/booth-icon.png');
+const OPS_ICON = require('../images/ops-icon.png');
+
+const MODES = [
+  {
+    key: 'swap',
+    title: 'Swap',
+    // subtitle: 'Customer login, pickups, subscriptions, and checkout',
+    icon: SWAP_ICON,
+  },
+  {
+    key: 'booth',
+    title: 'Marketplace Booth',
+    // subtitle: 'Booth approvals, POS, and seller operations',
+    icon: BOOTH_ICON,
+  },
+  {
+    key: 'ops',
+    title: 'Ops Mode',
+    // subtitle: 'Reports, products, customers, and subscriptions',
+    icon: OPS_ICON,
+  },
 ];
 
-const modeBackgrounds = {
-  booth: '#e0f2fe',
-  swap: '#ffe4e1',
-  ops: '#dcfce7',
-};
-
-const OPS_PASSWORD = process.env.EXPO_PUBLIC_OPS_PASSWORD || '';
-
-export const HomeScreen = ({ push, mode, setMode }) => {
-  const activeMode = mode;
-  const [opsPassword, setOpsPassword] = useState('');
-  const [opsError, setOpsError] = useState('');
-  const [opsUnlocked, setOpsUnlocked] = useState(false);
-
-  const onOpenOps = () => {
-    if (!OPS_PASSWORD) {
-      setOpsError('EXPO_PUBLIC_OPS_PASSWORD is not configured.');
-      return;
-    }
-
-    if (opsPassword !== OPS_PASSWORD) {
-      setOpsError('Incorrect password.');
-      return;
-    }
-
-    setOpsError('');
-    setOpsUnlocked(true);
-    setOpsPassword('');
-  };
-
-  return (
-    <ScreenShell title="Swapaholic" subtitle="Operations workspace" backgroundColor={modeBackgrounds[activeMode]}>
-      <View style={styles.tabsRow}>
-        {modeTabs.map((tab) => (
-          <TouchableOpacity
-            key={tab.key}
-            onPress={() => setMode(tab.key)}
-            style={[styles.tabButton, activeMode === tab.key && styles.tabButtonActive]}
-          >
-            <Text style={[styles.tabButtonText, activeMode === tab.key && styles.tabButtonTextActive]}>{tab.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {activeMode === 'swap' ? (
-        <>
-          <Text style={styles.sectionTitle}>Swap</Text>
-          <Card title="Customer Login" subtitle="Enter email and open customer summary" onPress={() => push('customerPortal')} />
-          <Card title="Scan Pickups" subtitle="Open pickup scan and linked pickup flows" onPress={() => push('pickupCards')} />
-          <Card title="View Subscriptions" subtitle="Browse swap subscription plans" onPress={() => push('swapPlans')} />
-          <Card title="Checkout" subtitle="Scan products and process non-customer checkout" onPress={() => push('checkout', { mode: 'nonCustomer' })} />
-        </>
-      ) : null}
-
-      {activeMode === 'booth' ? (
-        <>
-          <Text style={styles.sectionTitle}>Booth</Text>
-          <Card title="View All Booths" subtitle="Browse and manage booth approvals" onPress={() => push('booths')} />
-          <Card title="Search Booth" subtitle="Find specific booth by name or seller" onPress={() => push('booths', { focusSearch: true })} />
-          <Card title="Completed Sales" subtitle="Review past transactions" onPress={() => push('boothAllCheckouts')} />
-          <Card title="Checkout" subtitle="Process new sale" onPress={() => push('boothCheckout')} />
-        </>
-      ) : null}
-
-      {activeMode === 'ops' ? (
-        <>
-          {opsUnlocked ? (
-            <>
-              <OpsSummary headerVariant="plain" />
-              <Card title="Sales Reports" subtitle="Daily and range-based sales reports" onPress={() => push('opsSalesReports')} />
-              <Card title="Products List" subtitle="UI placeholder" onPress={() => push('opsProducts')} />
-              <Card title="Customer List" subtitle="UI placeholder" onPress={() => push('opsCustomers')} />
-              <Card title="Subscriptions List" subtitle="UI placeholder" onPress={() => push('opsSubscriptions')} />
-            </>
-          ) : (
-            <View style={styles.formCard}>
-              <Text style={styles.cardTitle}>Ops Access</Text>
-              <Text style={styles.cardSubtitle}>Enter the ops password to unlock this section.</Text>
-              <TextInput
-                value={opsPassword}
-                onChangeText={(value) => {
-                  setOpsPassword(value);
-                  if (opsError) {
-                    setOpsError('');
-                  }
-                }}
-                secureTextEntry
-                placeholder="Ops password"
-                placeholderTextColor="#94a3b8"
-                onSubmitEditing={onOpenOps}
-                style={styles.input}
-              />
-              {opsError ? <Text style={styles.helperText}>{opsError}</Text> : null}
-              <TouchableOpacity style={styles.primaryButton} onPress={onOpenOps}>
-                <Text style={styles.primaryButtonText}>Unlock Ops</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </>
-      ) : null}
-    </ScreenShell>
-  );
-};
+export const HomeScreen = ({ push }) => (
+  <ScreenShell
+    backgroundColor="#f2f7e6"
+    headerStyle={styles.homeHeader}
+    headerContent={<Image source={SWAPAHOLIC_LOGO} style={styles.homeLogo} resizeMode="contain" />}
+    contentContainerStyle={styles.homeContent}
+    statusBarStyle="light-content"
+  >
+    <View style={styles.homeModeStack}>
+      {MODES.map((mode) => (
+        <TouchableOpacity key={mode.key} style={styles.homeModeCard} onPress={() => push(mode.key)}>
+          <View style={styles.homeModeIconSlot}>
+            <Image source={mode.icon} style={styles.homeModeIconImage} resizeMode="contain" />
+          </View>
+          <Text style={styles.homeModeTitle}>{mode.title}</Text>
+          <Text style={styles.homeModeSubtitle}>{mode.subtitle}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  </ScreenShell>
+);

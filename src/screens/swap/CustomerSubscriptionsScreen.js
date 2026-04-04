@@ -81,6 +81,14 @@ export const CustomerSubscriptionsScreen = ({ pop, push, customerEmail }) => {
         const points = toWholeNumber(subscription.numberOfPoints);
         const displayId = subscription.uniqueId || subscription.id || 'NA';
         const statusDisplay = getSubscriptionStatusDisplay(subscription);
+        const badgeLabel =
+          subscriptionKind === 'buy-points' ? 'Buy Points' : subscriptionKind === 'flexi' ? 'Flexi' : null;
+        const badgeStyle =
+          subscriptionKind === 'buy-points'
+            ? styles.subscriptionBadgeBuyPoints
+            : subscriptionKind === 'flexi'
+              ? styles.subscriptionBadgeFlexi
+              : null;
 
         return (
           <TouchableOpacity
@@ -91,14 +99,14 @@ export const CustomerSubscriptionsScreen = ({ pop, push, customerEmail }) => {
             <View style={styles.subscriptionPlanRow}>
               <View style={styles.subscriptionPlanCopy}>
                 <View style={styles.subscriptionIdentityBlock}>
-                  <Text style={styles.rowLabel}>Subscription Id</Text>
+                  {/* <Text style={styles.rowLabel}>Subscription Id</Text> */}
                   <Text style={styles.subscriptionIdentityValue}>{displayId}</Text>
                 </View>
                 <Row label="Plan" value={subscription.plan} />
               </View>
-              {subscriptionKind === 'buy-points' ? (
-                <View style={styles.subscriptionBadge}>
-                  <Text style={styles.subscriptionBadgeText}>Buy Points</Text>
+              {badgeLabel ? (
+                <View style={[styles.subscriptionBadge, badgeStyle]}>
+                  <Text style={styles.subscriptionBadgeText}>{badgeLabel}</Text>
                 </View>
               ) : null}
             </View>

@@ -6,7 +6,7 @@ import { ScreenShell } from '../../components/ScreenShell';
 import { useAppSessionStore } from '../../store/appSessionStore';
 import { styles } from '../../styles/commonStyles';
 
-export const BoothOpsScreen = ({ push, pop }) => {
+export const BoothModeScreen = ({ push, pop }) => {
   const boothToken = useAppSessionStore((state) => state.boothToken);
   const liveMode = isBoothLiveEnabled();
   const hasBoothToken = Boolean(boothToken);
@@ -14,11 +14,11 @@ export const BoothOpsScreen = ({ push, pop }) => {
   return (
     <ScreenShell
       title="Swapaholic Booth"
-      subtitle={liveMode ? (hasBoothToken ? 'Live backend connected' : 'Booth token unavailable') : 'Mock booth workspace'}
+      subtitle="Marketplace Booth Manager"
       onBack={pop}
       backgroundColor="#eef2ff"
     >
-      {liveMode ? (
+      {/* {liveMode ? (
         <View style={styles.formCard}>
           <Text style={styles.cardTitle}>{hasBoothToken ? 'Booth Backend Connected' : 'Booth Backend Token Missing'}</Text>
           <Text style={styles.cardSubtitle}>
@@ -27,7 +27,7 @@ export const BoothOpsScreen = ({ push, pop }) => {
               : 'Set EXPO_PUBLIC_BOOTH_EMAIL and let the app refresh the booth token on launch.'}
           </Text>
         </View>
-      ) : null}
+      ) : null} */}
 
       <Card title="View All Booths" subtitle="Browse and manage booth approvals" onPress={() => push('booths')} />
       <Card title="Search Booth" subtitle="Find specific booth by name or seller" onPress={() => push('booths', { focusSearch: true })} />
@@ -37,11 +37,11 @@ export const BoothOpsScreen = ({ push, pop }) => {
         <Card title="Generate Report" subtitle="Coming soon" />
       </View>
 
-      <View style={styles.formCard}>
+      {/* <View style={styles.formCard}>
         <Card title="Booth Applications" subtitle="Legacy booth applications workflow" onPress={() => push('boothApplications')} />
         <Card title="Product Review" subtitle="Legacy product review workflow" onPress={() => push('boothReview')} />
         <Card title="Print Product Tags" subtitle="Legacy tag printing workflow" onPress={() => push('boothTags')} />
-      </View>
+      </View> */}
     </ScreenShell>
   );
 };

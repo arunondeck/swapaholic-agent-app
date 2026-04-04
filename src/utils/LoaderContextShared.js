@@ -86,15 +86,19 @@ export const LoaderProvider = ({ children }) => {
       {children}
       {pendingCount > 0 ? (
         <View pointerEvents="auto" style={overlayStyles.backdrop}>
-          <View style={overlayStyles.card}>
-            <Image source={loaderGif} style={overlayStyles.gif} />
-            {message ? <Text style={overlayStyles.text}>{message}</Text> : null}
-          </View>
+          <GlobalLoaderCard message={message} />
         </View>
       ) : null}
     </LoaderContext.Provider>
   );
 };
+
+export const GlobalLoaderCard = ({ message = '', border = true }) => (
+  <View style={[overlayStyles.card, border === false ? { borderWidth: 0, borderColor: 'transparent' } : null]}>
+    <Image source={loaderGif} style={overlayStyles.gif} />
+    {message ? <Text style={overlayStyles.text}>{message}</Text> : null}
+  </View>
+);
 
 export const useLoader = () => {
   const context = useContext(LoaderContext);

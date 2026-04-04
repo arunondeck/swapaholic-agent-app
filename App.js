@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BackHandler, Image, SafeAreaView, StatusBar, Text, View } from 'react-native';
 import appConfig from './app.json';
-import { LoaderProvider } from './src/utils/LoaderContextShared';
+import { GlobalLoaderCard, LoaderProvider } from './src/utils/LoaderContextShared';
+import { AppNavigationProvider } from './src/navigation/AppNavigationContext';
 import { ScreenShell } from './src/components/ScreenShell';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { BoothAllCheckoutsScreen } from './src/screens/booth/BoothAllCheckoutsScreen';
@@ -9,7 +10,7 @@ import { BoothApplicationsScreen } from './src/screens/booth/BoothApplicationsSc
 import { BoothCheckoutDetailScreen } from './src/screens/booth/BoothCheckoutDetailScreen';
 import { BoothCheckoutScreen } from './src/screens/booth/BoothCheckoutScreen';
 import { BoothDetailsScreen } from './src/screens/booth/BoothDetailsScreen';
-import { BoothOpsScreen } from './src/screens/booth/BoothOpsScreen';
+import { BoothModeScreen } from './src/screens/booth/BoothModeScreen';
 import { BoothReviewScreen } from './src/screens/booth/BoothReviewScreen';
 import { BoothTagsScreen } from './src/screens/booth/BoothTagsScreen';
 import { BoothsScreen } from './src/screens/booth/BoothsScreen';
@@ -40,13 +41,48 @@ import { useAppSessionStore } from './src/store/appSessionStore';
 import { useSwapStore } from './src/store/swapStore';
 import { styles } from './src/styles/commonStyles';
 
-const SPLASH_MIN_DURATION_MS = 2000;
+const SPLASH_MIN_DURATION_MS = 60000;
 const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || appConfig.expo?.name || 'Swapaholic';
 const APP_VERSION = appConfig.expo?.version || '0.0.1';
-const APP_LOGO = require('./src/images/app-icon.png');
+const APP_LOGO = require('./src/images/swapaholic-logo-with-quote.png');
+const MODE_HOME_BY_ROUTE = {
+  approval: 'swap',
+  booth: 'booth',
+  boothAllCheckouts: 'booth',
+  boothApplications: 'booth',
+  boothCheckout: 'booth',
+  boothCheckoutDetail: 'booth',
+  boothDetails: 'booth',
+  boothReview: 'booth',
+  boothTags: 'booth',
+  booths: 'booth',
+  buySubscription: 'swap',
+  checkout: 'swap',
+  customerItemEntry: 'swap',
+  customerOrderDetail: 'swap',
+  customerOrders: 'swap',
+  customerOverview: 'swap',
+  customerPickupDetail: 'swap',
+  customerPickups: 'swap',
+  customerPortal: 'swap',
+  customerSubscriptionDetail: 'swap',
+  customerSubscriptions: 'swap',
+  customerSwappedIn: 'swap',
+  home: null,
+  inspection: 'swap',
+  ops: 'ops',
+  opsCustomers: 'ops',
+  opsProducts: 'ops',
+  opsSalesReports: 'ops',
+  opsSubscriptions: 'ops',
+  pickupCards: 'swap',
+  swap: 'swap',
+  swapPlans: 'swap',
+  swapTags: 'swap',
+};
 
 export default function App() {
-  const [stack, setStack] = useState([{ route: 'home', params: { mode: 'swap' } }]);
+  const [stack, setStack] = useState([{ route: 'home', params: {} }]);
   const [minSplashElapsed, setMinSplashElapsed] = useState(false);
   const hydrateAppSession = useAppSessionStore((state) => state.hydrate);
   const hydrated = useAppSessionStore((state) => state.hydrated);
@@ -58,10 +94,23 @@ export default function App() {
   const current = stack[stack.length - 1];
   const push = (route, params = {}) => setStack((prev) => [...prev, { route, params }]);
   const pop = () => setStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
-  const updateCurrentParams = (params) =>
-    setStack((prev) =>
-      prev.map((entry, index) => (index === prev.length - 1 ? { ...entry, params: { ...entry.params, ...params } } : entry))
-    );
+  const currentModeHomeRoute = MODE_HOME_BY_ROUTE[current.route] || null;
+  const goToModeHome = () => {
+    if (!currentModeHomeRoute) {
+      return;
+    }
+
+    setStack((prev) => {
+      const targetIndex = prev.map((entry) => entry.route).lastIndexOf(currentModeHomeRoute);
+      if (targetIndex >= 0) {
+        return prev.slice(0, targetIndex + 1);
+      }
+
+      const homeIndex = prev.map((entry) => entry.route).indexOf('home');
+      const baseStack = homeIndex >= 0 ? prev.slice(0, homeIndex + 1) : [{ route: 'home', params: {} }];
+      return [...baseStack, { route: currentModeHomeRoute, params: {} }];
+    });
+  };
 
   useEffect(() => {
     hydrateAppSession();
@@ -108,8 +157,8 @@ export default function App() {
 
   const screens = useMemo(
     () => ({
-      home: (params) => <HomeScreen push={push} mode={params?.mode || 'swap'} setMode={(mode) => updateCurrentParams({ mode })} />,
-      booth: () => <BoothOpsScreen push={push} pop={pop} />,
+      home: () => <HomeScreen push={push} />,
+      booth: () => <BoothModeScreen push={push} pop={pop} />,
       booths: (params) => <BoothsScreen push={push} pop={pop} focusSearch={params?.focusSearch} />,
       boothDetails: (params) => <BoothDetailsScreen push={push} pop={pop} boothId={params?.boothId} />,
       boothAllCheckouts: () => <BoothAllCheckoutsScreen pop={pop} push={push} />,
@@ -168,12 +217,18 @@ export default function App() {
     if (!minSplashElapsed || !hydrated || checkingSession) {
       return (
         <SafeAreaView style={styles.splashScreen}>
-          <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-          <View style={styles.splashContent}>
+          <StatusBar barStyle="light-content" backgroundColor="#000000" />
+          <View style={styles.splashTopPanel}>
             <Image source={APP_LOGO} style={styles.splashLogo} resizeMode="contain" />
-            <Text style={styles.splashAppName}>{APP_NAME}</Text>
-            <Text style={styles.splashVersion}>Version {APP_VERSION}</Text>
-            <Text style={styles.splashLoadingText}>Loading...</Text>
+          </View>
+          <View style={styles.splashBottomPanel}>
+            <View style={styles.splashContent}>
+              <Text style={styles.splashAppName}>{APP_NAME}</Text>
+              <Text style={styles.splashVersion}>Version {APP_VERSION}</Text>
+              <View style={styles.splashLoadingText}>
+                <GlobalLoaderCard border={false} message="Firing Superpowers!!" />
+              </View>
+            </View>
           </View>
         </SafeAreaView>
       );
@@ -182,5 +237,17 @@ export default function App() {
     return screens[current.route]?.(current.params) || null;
   };
 
-  return <LoaderProvider>{renderCurrentScreen()}</LoaderProvider>;
+  return (
+    <LoaderProvider>
+      <AppNavigationProvider
+        value={{
+          currentRoute: current.route,
+          currentModeHomeRoute,
+          goToModeHome,
+        }}
+      >
+        {renderCurrentScreen()}
+      </AppNavigationProvider>
+    </LoaderProvider>
+  );
 }

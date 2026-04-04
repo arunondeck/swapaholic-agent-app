@@ -219,7 +219,7 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
   const canOpenLatestPackage = Boolean(displayedPackageName && latestSubscriptionId);
 
   return (
-    <ScreenShell title={customer.name} subtitle={customer.email} onBack={pop} backgroundColor="#e7f7ef">
+    <ScreenShell title={customer.name} subtitle={customer.email} onBack={pop} backgroundColor="#ffe4e1">
       <View style={styles.overviewTable}>
         <View style={styles.overviewTableRow}>
           <View style={[styles.overviewTableCell, styles.overviewTableCellWithDivider]}>
@@ -306,7 +306,7 @@ export const CustomerOverviewScreen = ({ push, pop, customerEmail }) => {
                   activeOpacity={0.8}
                   onPress={() => push('customerPickupDetail', { email: customer.email, pickupId: pickup.id })}
                 >
-                  <Text style={[styles.overviewTableHint, styles.overviewTableLinkValue]}>
+                  <Text style={[styles.overviewTableHintExtra, styles.overviewTableLinkValue]}>
                     {`${itemsAdded}/${pickupTotal} items in pickup ${formatPickupDate(pickup)}`}
                   </Text>
                 </TouchableOpacity>
