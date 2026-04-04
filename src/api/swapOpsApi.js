@@ -1075,7 +1075,10 @@ const assertSwapSuccess = (response) => {
 
   if (isFailureStatus || !isSuccessStatus) {
     const error = getResponseError(response);
-    throw new Error(error?.message || response?.message || response?.success?.message || 'Something went wrong');
+    const requestError = new Error(error?.message || response?.message || response?.success?.message || 'Something went wrong');
+    requestError.response = response;
+    requestError.responseError = error || null;
+    throw requestError;
   }
 
   return getResponseData(response);
@@ -1868,7 +1871,7 @@ export const getCustomerOrderDetails = async (email, orderId) => {
 
 /**
  * Create a swap order.
- * Endpoint: POST /{api_ver}/orders/init
+ * Endpoint: POST /{api_ver}/orders/save/shop
  * @param {import('../types/swapTypes').SwapOrderCreateRequest} orderData
  * @returns {Promise<import('../types/swapTypes').SwapApiEnvelope<import('../types/swapTypes').SwapOrderCreateResponseData>>}
  */
@@ -2087,27 +2090,60 @@ export const placeSwapCheckoutOrder = async ({
     throw new Error('Checkout could not resolve a subscribe id.');
   }
 
-  const response = await createSwapOrder(
-    {
-      subscribe_id_c: resolvedSubscribeId,
-      customer_address_id_c: '',
-      items: eligibleItems.map((item) => ({
-        id: item.id,
-        evaluated_points_c: String(toPointsValue(item.points)),
-      })),
-      customer_address: '.',
-    },
-    authToken,
-    tokenScope
+  const orderPayload = {
+    subscribe_id_c: resolvedSubscribeId,
+    customer_address_id_c: '',
+    items: eligibleItems.map((item) => ({
+      id: item.id,
+      name: item.name || '',
+      evaluated_points_c: String(toPointsValue(item.points)),
+    })),
+    customer_address: '.',
+  };
+  console.log(
+    '[checkout] create order payload full',
+    JSON.stringify(
+      {
+        mode,
+        email: resolvedEmail,
+        endpoint: `${SWAP_API_URL}/${SWAP_API_VERSION}/${SWAP_ORDER_CREATE_PATH}`,
+        payload: orderPayload,
+      },
+      null,
+      2
+    )
   );
 
-  const data = assertSwapSuccess(response);
-  const createdOrder = data?.order;
-  const itemCount = Number.parseInt(createdOrder?.total_items_c || '0', 10) || eligibleItems.length;
-  const resolvedTotalPoints = Number.parseInt(createdOrder?.order_cost_c || '0', 10) || totalPoints;
+  const response = await createSwapOrder(orderPayload, authToken, tokenScope);
+  console.log('[checkout] create order response full', JSON.stringify(response, null, 2));
 
-  return {
-    id: createdOrder?.unique_id_c || createdOrder?.id || `ORD-${Date.now()}`,
+  let data;
+  try {
+    data = assertSwapSuccess(response);
+  } catch (error) {
+    console.error(
+      '[checkout] create order error full',
+      JSON.stringify(
+        {
+          message: error?.message || 'Unknown error',
+          response,
+          responseError: error?.responseError || null,
+          stack: error?.stack || '',
+        },
+        null,
+        2
+      )
+    );
+    throw error;
+  }
+  const createdOrder = data?.order || null;
+  const itemCount = Number.parseInt(createdOrder?.total_items_c || '0', 10) || eligibleItems.length;
+  const resolvedTotalPoints =
+    Number.parseInt(String(createdOrder?.order_cost_c ?? data?.order_cost ?? '0'), 10) || totalPoints;
+
+  const orderResult = {
+    id: createdOrder?.id || data?.id || `ORD-${Date.now()}`,
+    referenceId: createdOrder?.unique_id_c || data?.reference_id || '',
     status: createdOrder?.status_c || 'Placed',
     date: createdOrder?.order_date_c || new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date()),
     itemCount: `${itemCount} item${itemCount === 1 ? '' : 's'}`,
@@ -2115,6 +2151,8 @@ export const placeSwapCheckoutOrder = async ({
     paymentMethod,
     email: resolvedEmail,
   };
+  console.log('[checkout] create order result', orderResult);
+  return orderResult;
 };
 
 export const placeCustomerOrder = async ({ email, items = [], paymentMethod, subscribeId = '' }) =>

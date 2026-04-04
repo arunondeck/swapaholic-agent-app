@@ -376,6 +376,7 @@ export const styles = StyleSheet.create({
     color: '#111827',
   },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  summaryTotalsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12,  fontWeight: 600},
   rowLabel: { color: '#6b7280', fontSize: 12, textTransform: 'uppercase' },
   rowValue: { color: '#111827', fontSize: 13, fontWeight: '600' },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },

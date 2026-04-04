@@ -124,7 +124,7 @@ export default function App() {
       inspection: () => <InspectionScreen pop={pop} />,
       approval: (params) => <ApprovalScreen pop={pop} customerEmail={params?.email} />,
       swapTags: () => <SwapTagsScreen pop={pop} />,
-      checkout: (params) => <CheckoutScreen pop={pop} customerEmail={params?.email} mode={params?.mode || 'nonCustomer'} />,
+      checkout: (params) => <CheckoutScreen push={push} pop={pop} customerEmail={params?.email} mode={params?.mode || 'nonCustomer'} />,
       customerPortal: () => <CustomerPortalScreen push={push} pop={pop} />,
       customerOverview: (params) => <CustomerOverviewScreen push={push} pop={pop} customerEmail={params?.email} />,
       customerSubscriptions: (params) => <CustomerSubscriptionsScreen push={push} pop={pop} customerEmail={params?.email} />,

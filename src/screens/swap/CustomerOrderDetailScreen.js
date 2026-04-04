@@ -76,7 +76,6 @@ export const CustomerOrderDetailScreen = ({ pop, customerEmail, orderId }) => {
         <Row label="Status" value={order.status_c || 'NA'} />
         <Row label="Total Price" value={`${Number.parseInt(String(order.order_cost_c || '0'), 10) || 0} pts`} />
         <Row label="Number of Items" value={String(order.total_items_c || order.order_line_items?.length || 0)} />
-        <Row label="Tracking Id" value={order.tracking_id_c || 'NA'} />
       </View>
 
       <Text style={styles.sectionTitle}>Items</Text>

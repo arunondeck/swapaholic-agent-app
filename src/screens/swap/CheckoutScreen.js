@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { findProductByQrCode, placeSwapCheckoutOrder } from '../../api/swapOpsApi';
+import { Alert, Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { findProductByQrCode, getCustomerOrderDetails, placeSwapCheckoutOrder } from '../../api/swapOpsApi';
 import { Card } from '../../components/Card';
-import { CheckoutPaymentSelector } from '../../components/CheckoutPaymentSelector';
+import { PaymentMethodModal } from '../../components/PaymentMethodModal';
 import { ScreenShell } from '../../components/ScreenShell';
 import { SwapProductItemWithActions } from '../../components/SwapProductItemWithActions';
 import { useLoader } from '../../utils/LoaderContextShared';
@@ -32,7 +32,7 @@ const normalizeCartItem = (item, index = 0) => ({
   points: String(item.points || (item.evaluated_points_c ? `${item.evaluated_points_c} pts` : '0')),
 });
 
-export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => {
+export const CheckoutScreen = ({ push, pop, customerEmail, mode = 'nonCustomer' }) => {
   const [customer, setCustomer] = useState(null);
   const [localCartItems, setLocalCartItems] = useState([]);
   const [error, setError] = useState('');
@@ -216,6 +216,12 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
 
   const openPaymentModal = () => {
     if (cartItems.length === 0) {
+      Alert.alert('Empty Cart', 'Add at least one item before placing the order.');
+      return;
+    }
+
+    if (isCustomerMode && cashPayable <= 0) {
+      handlePlaceOrder();
       return;
     }
 
@@ -224,13 +230,17 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
   };
 
   const handlePlaceOrder = async () => {
-    if (!selectedPaymentMethod) {
+    if (submitting) {
+      return;
+    }
+
+    if (!selectedPaymentMethod && cashPayable > 0) {
       return;
     }
 
     try {
       setSubmitting(true);
-      await withLoader(
+      const order = await withLoader(
         placeSwapCheckoutOrder({
           mode,
           email: customer?.email || customerEmail || '',
@@ -245,6 +255,12 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
         }),
         'Placing order...'
       );
+      console.log('[checkout] order placed', {
+        mode,
+        orderId: order?.id || '',
+        paymentMethod: selectedPaymentMethod,
+        email: order?.email || customer?.email || customerEmail || '',
+      });
 
       invalidateCustomerCache(['orders', 'orderDetailsById', 'profile']);
       if (isCustomerMode) {
@@ -256,8 +272,39 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
       setSelectedPaymentMethod('');
       setScanText('');
       setManualPoints('');
+      setError('');
+
+      if (isCustomerMode && order?.id && push) {
+        await withLoader(
+          new Promise((resolve) => setTimeout(resolve, 1000)).then(() =>
+            getCustomerOrderDetails(order?.email || customer?.email || customerEmail || '', order.id)
+          ),
+          'Loading order details...'
+        );
+        push('customerOrderDetail', {
+          email: order?.email || customer?.email || customerEmail || '',
+          orderId: order.id,
+        });
+        return;
+      }
+
+      Alert.alert('Order Placed', order?.id ? `Order ${order.id} was created successfully.` : 'Checkout completed successfully.');
     } catch (submitError) {
+      console.error(
+        '[checkout] order failed full',
+        JSON.stringify(
+          {
+            message: submitError?.message || 'Unknown error',
+            response: submitError?.response || null,
+            responseError: submitError?.responseError || null,
+            stack: submitError?.stack || '',
+          },
+          null,
+          2
+        )
+      );
       setError(submitError.message || 'Failed to place order.');
+      Alert.alert('Checkout Failed', submitError.message || 'Failed to place order.');
     } finally {
       setSubmitting(false);
     }
@@ -268,13 +315,13 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
       {isCustomerMode ? <Card title={headerTitle} subtitle={headerSubtitle} /> : null}
 
       <View style={styles.scannerCard}>
-        <Text style={styles.cardTitle}>QR Code Scanner</Text>
-        <Text style={styles.helperText}>Scan or paste QR text and we will find the product, then add it to cart.</Text>
+        <Text style={styles.cardTitle}>Scan the product code</Text>
+        {/* <Text style={styles.helperText}>Scan or paste QR text and we will find the product, then add it to cart.</Text> */}
         <TextInput
           value={scanText}
           onChangeText={setScanText}
           style={styles.input}
-          placeholder="Scan text / SKU"
+          placeholder="Product ID"
           placeholderTextColor="#8b8b8b"
           autoCapitalize="characters"
         />
@@ -293,7 +340,7 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
         <Text style={styles.secondaryButtonText}>Unlabelled Item - Add Points</Text>
       </TouchableOpacity>
 
-      <Card title="Cart" subtitle={`${cartItems.length} item${cartItems.length === 1 ? '' : 's'} in cart`} />
+      {/* <Card title="Cart" subtitle={`${cartItems.length} item${cartItems.length === 1 ? '' : 's'} in cart`} /> */}
       {cartItems.length === 0 ? (
         <View style={[styles.formCard, { borderStyle: 'dashed' }]}>
           <Text style={[styles.cardTitle, { textAlign: 'center' }]}>Your cart is empty</Text>
@@ -315,14 +362,14 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
           <Text style={styles.rowLabel}>Items</Text>
           <Text style={styles.rowValue}>{cartItems.length}</Text>
         </View>
-        <View style={styles.row}>
+        <View style={styles.summaryTotalsRow}>
           <Text style={styles.rowLabel}>Total</Text>
           <Text style={styles.rowValue}>{cartTotal} pts</Text>
         </View>
-        <View style={styles.row}>
+        {/* <View style={styles.row}>
           <Text style={styles.rowLabel}>Available</Text>
           <Text style={styles.rowValue}>{isCustomerMode ? `${availablePoints} pts` : '0 pts'}</Text>
-        </View>
+        </View> */}
         {!isCustomerMode ? (
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Points to Buy</Text>
@@ -341,22 +388,21 @@ export const CheckoutScreen = ({ pop, customerEmail, mode = 'nonCustomer' }) => 
         <Text style={styles.primaryButtonText}>Place Order</Text>
       </TouchableOpacity>
 
-      <Modal transparent visible={paymentModalVisible} animationType="fade" onRequestClose={() => setPaymentModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', justifyContent: 'center', padding: 20 }}>
-          <CheckoutPaymentSelector
-            paymentOptions={PAYMENT_OPTIONS}
-            selectedMode={selectedPaymentMethod}
-            onSelectMode={setSelectedPaymentMethod}
-            onConfirm={handlePlaceOrder}
-            onCancel={() => {
-              setPaymentModalVisible(false);
-              setSelectedPaymentMethod('');
-            }}
-            submitting={submitting}
-            confirmLabel="Place Order"
-          />
-        </View>
-      </Modal>
+      <PaymentMethodModal
+        visible={paymentModalVisible}
+        paymentOptions={PAYMENT_OPTIONS}
+        selectedMode={selectedPaymentMethod}
+        onSelectMode={setSelectedPaymentMethod}
+        onConfirm={handlePlaceOrder}
+        onCancel={() => {
+          setPaymentModalVisible(false);
+          setSelectedPaymentMethod('');
+        }}
+        title="Select Payment Method"
+        helperText="Choose the payment method before sending the checkout request."
+        confirmLabel="Place Order"
+        submitting={submitting}
+      />
 
       <Modal transparent visible={manualModalVisible} animationType="fade" onRequestClose={() => setManualModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', justifyContent: 'center', padding: 20 }}>
