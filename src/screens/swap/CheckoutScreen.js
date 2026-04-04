@@ -264,6 +264,7 @@ export const CheckoutScreen = ({ push, pop, customerEmail, mode = 'nonCustomer' 
 
       invalidateCustomerCache(['orders', 'orderDetailsById', 'profile']);
       if (isCustomerMode) {
+        await fetchCustomerProfileIfNeeded(customer?.email || customerEmail || '', { force: true });
         clearCustomerCheckoutCart();
       } else {
         setLocalCartItems([]);

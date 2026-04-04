@@ -444,7 +444,7 @@ export const useSwapStore = create((set, get) => ({
     }));
 
     try {
-      const profile = await getCustomerProfile(normalizedEmail);
+      const profile = await getCustomerProfile(normalizedEmail, { forceRefresh: force });
       set((state) => ({
         currentCustomerEmail: normalizedEmail,
         currentCustomerOwnerKey: getCustomerOwnerKey({ email: normalizedEmail, customerId: profile?.id || getCustomerIdFromSession({ profile }) }),

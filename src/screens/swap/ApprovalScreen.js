@@ -58,6 +58,7 @@ export const ApprovalScreen = ({ pop, customerEmail, showDateEntered = false }) 
   const { withLoader } = useLoader();
   const activeCustomer = useSwapStore((state) => state.activeCustomer);
   const fetchCustomerUnreviewedItemsIfNeeded = useSwapStore((state) => state.fetchCustomerUnreviewedItemsIfNeeded);
+  const fetchCustomerProfileIfNeeded = useSwapStore((state) => state.fetchCustomerProfileIfNeeded);
   const invalidateCustomerCache = useSwapStore((state) => state.invalidateCustomerCache);
   const canUseCache = useSwapStore((state) => state.isCustomerCacheUsable);
   const activeEmail = customerEmail || activeCustomer?.email || '';
@@ -120,6 +121,7 @@ export const ApprovalScreen = ({ pop, customerEmail, showDateEntered = false }) 
       }
 
       invalidateCustomerCache(['unreviewedItemsByKey', 'profile']);
+      await fetchCustomerProfileIfNeeded(activeEmail, { force: true });
       await fetchCustomerUnreviewedItemsIfNeeded(
         {
           maxResults: pageSize,

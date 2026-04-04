@@ -1739,9 +1739,31 @@ const waitForFlexiPlanVerification = async ({
   };
 };
 
-const buyPointsForCheckout = async ({ requiredPoints, paymentMethod, authToken, tokenScope = '' }) => {
+const buyPointsForCheckout = async ({
+  requiredPoints,
+  paymentMethod,
+  authToken,
+  tokenScope = '',
+  customerEmail = '',
+  activeSubscribeId = '',
+}) => {
   if (requiredPoints <= 0) {
     throw new Error('Required points must be greater than zero.');
+  }
+
+  const normalizedActiveSubscribeId = String(activeSubscribeId || '').trim();
+  const normalizedCustomerEmail = String(customerEmail || '').trim().toLowerCase();
+
+  if (normalizedActiveSubscribeId && normalizedCustomerEmail) {
+    const updateResponse = await updateCustomerSubscribe({
+      subscribeId: normalizedActiveSubscribeId,
+      subscribe: {
+        status_c: 'completed',
+      },
+      customerEmail: normalizedCustomerEmail,
+      authToken,
+    });
+    assertSwapSuccess(updateResponse);
   }
 
   const subscriptions = await getShopPointsSubscriptions(authToken, tokenScope);
@@ -2068,20 +2090,26 @@ export const placeSwapCheckoutOrder = async ({
         paymentMethod,
         authToken,
         tokenScope,
+        customerEmail: resolvedEmail,
+        activeSubscribeId: resolvedSubscribeId,
       });
       resolvedSubscribeId = purchase.subscribeId;
     }
   } else {
     const buyPointsSession = await resolveBuyPointsSession();
+    const buyPointsCustomerSession = await authenticateCustomer(buyPointsSession.email);
     resolvedEmail = buyPointsSession.email;
     authToken = buyPointsSession.token;
     tokenScope = TOKEN_SCOPE.BUY_POINTS;
+    const activeBuyPointsSubscribeId = getCheckoutSubscribeIdFromProfile(buyPointsCustomerSession?.profile || null);
 
     const purchase = await buyPointsForCheckout({
       requiredPoints: totalPoints,
       paymentMethod,
       authToken,
       tokenScope,
+      customerEmail: resolvedEmail,
+      activeSubscribeId: activeBuyPointsSubscribeId,
     });
     resolvedSubscribeId = purchase.subscribeId;
   }
@@ -2669,7 +2697,7 @@ export const getSubscriptionsList = async (tenancy = 'SWAP.SUB.TYPE.ITEMS.STORE'
   if (!resolvedAuthToken) {
     throw new Error('Operator token is unavailable. Rehydrate app session to obtain and persist it.');
   }
-  return postJson('subscriptions/list', { tenancy }, true, {}, resolvedAuthToken, 'getSubscriptionsList', tokenScope);
+  return postJson('v3/subscriptions/list', { tenancy }, false, {}, resolvedAuthToken, 'getSubscriptionsList', tokenScope);
 };
 
 export const getAllSubscriptions = async () => {
@@ -2690,7 +2718,7 @@ export const getAllSubscriptions = async () => {
 export const getShopPointsSubscriptions = async (authToken = '', tokenScope = TOKEN_SCOPE.SHOP) => {
   const response = await getSubscriptionsList('SWAP.SUB.TYPE.POINTS.SHOP', authToken, tokenScope);
   console.log('[swapApi] getShopPointsSubscriptions raw response', response);
-  const subscriptions = getResponseData(response).subscriptions || EMPTY_ARRAY;
+  const subscriptions = response?.subscriptions || getResponseData(response).subscriptions || EMPTY_ARRAY;
   console.log('[swapApi] getShopPointsSubscriptions resolved subscriptions', subscriptions);
   return subscriptions;
 };
@@ -2698,7 +2726,7 @@ export const getShopPointsSubscriptions = async (authToken = '', tokenScope = TO
 export const getShopItemSubscriptions = async (authToken = '', tokenScope = TOKEN_SCOPE.SHOP) => {
   const response = await getSubscriptionsList('SWAP.SUB.TYPE.ITEMS.SHOP', authToken, tokenScope);
   console.log('[swapApi] getShopItemSubscriptions raw response', response);
-  const subscriptions = getResponseData(response).subscriptions || EMPTY_ARRAY;
+  const subscriptions = response?.subscriptions || getResponseData(response).subscriptions || EMPTY_ARRAY;
   console.log('[swapApi] getShopItemSubscriptions resolved subscriptions', subscriptions);
   return subscriptions;
 };
@@ -3337,13 +3365,13 @@ export const createCustomerPickupItem = async ({ pickupId, thumbnailFile, item =
   };
 };
 
-export const getCustomerProfile = async (email) => {
+export const getCustomerProfile = async (email, { forceRefresh = false } = {}) => {
   if (SWAP_USE_MOCK) {
     await delay();
     return getMockCustomerProfile(email);
   }
 
-  const session = await createCustomerSession(email);
+  const session = forceRefresh ? await authenticateCustomer(email, { forceRefresh: true }) : await createCustomerSession(email);
   return session.profile;
 };
 
