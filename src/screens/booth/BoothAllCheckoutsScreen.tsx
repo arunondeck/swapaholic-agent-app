@@ -115,54 +115,75 @@ export const BoothAllCheckoutsScreen = ({ pop, push }) => {
 
   return (
     <ScreenShell title="All Checkouts" subtitle={error || 'Checkout summary and list'} onBack={pop} backgroundColor="#f8fafc">
-      <View style={styles.formCard}>
-        <Text style={styles.sectionTitle}>Filters</Text>
-        <TextInput value={pendingStartDate} onChangeText={setPendingStartDate} style={styles.input} placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8" />
-        <TextInput value={pendingEndDate} onChangeText={setPendingEndDate} style={styles.input} placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8" />
-        <View style={styles.row}>
-          <TouchableOpacity
-            style={[styles.primaryButton, { flex: 1 }]}
-            onPress={() => {
-              setStartDate(pendingStartDate);
-              setEndDate(pendingEndDate);
-              setPage(1);
-            }}
-          >
-            <Text style={styles.primaryButtonText}>Apply Filters</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.secondaryButton, { flex: 1 }]}
-            onPress={() => {
-              setPendingStartDate('');
-              setPendingEndDate('');
-              setStartDate('');
-              setEndDate('');
-              setPage(1);
-            }}
-          >
-            <Text style={styles.secondaryButtonText}>Clear Filters</Text>
-          </TouchableOpacity>
+      <View style={styles.checkoutFilterFullBleed}>
+        <View style={styles.formCard}>
+          <Text style={styles.sectionTitle}>Filters</Text>
+          <View style={styles.checkoutFilterDateRow}>
+            <TextInput
+              value={pendingStartDate}
+              onChangeText={setPendingStartDate}
+              style={[styles.input, styles.checkoutFilterDateInput]}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#94a3b8"
+            />
+            <TextInput
+              value={pendingEndDate}
+              onChangeText={setPendingEndDate}
+              style={[styles.input, styles.checkoutFilterDateInput]}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#94a3b8"
+            />
+          </View>
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={[styles.primaryButton, { flex: 1 }]}
+              onPress={() => {
+                setStartDate(pendingStartDate);
+                setEndDate(pendingEndDate);
+                setPage(1);
+              }}
+            >
+              <Text style={styles.primaryButtonText}>Apply Filters</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryButton, { flex: 1 }]}
+              onPress={() => {
+                setPendingStartDate('');
+                setPendingEndDate('');
+                setStartDate('');
+                setEndDate('');
+                setPage(1);
+              }}
+            >
+              <Text style={styles.secondaryButtonText}>Clear Filters</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
-      <View style={styles.checkoutSummaryCard}>
-        <View style={styles.checkoutSummaryHeader}>
-          <Text style={styles.checkoutSummaryHeaderText}>Checkout Summary</Text>
-        </View>
-        <View style={styles.checkoutSummaryBody}>
-          <Text style={styles.summaryText}>{startDate || 'Earliest'} - {endDate || 'Latest'}</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
-              <Text style={styles.statLabel}>Total Checkouts</Text>
-              <Text style={styles.statValue}>{summary.totalCheckouts}</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statLabel}>Total Amount</Text>
-              <Text style={styles.statValue}>${Number(summary.totalCartValue || 0).toFixed(2)}</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statLabel}>Items Sold</Text>
-              <Text style={styles.statValue}>{summary.totalItemsSold}</Text>
+      <View style={styles.checkoutSummaryFullBleed}>
+        <View style={styles.checkoutSummaryCard}>
+          <View style={styles.checkoutSummaryHeader}>
+            <Text style={styles.checkoutSummaryHeaderText}>Checkout Summary {startDate || 'Earliest'} - {endDate || 'Latest'}</Text>
+          </View>
+          <View style={styles.checkoutSummaryBody}>
+            <View style={styles.checkoutDetailTable}>
+              <View style={[styles.checkoutDetailTableRow, styles.checkoutDetailTableRowBorder]}>
+                <View style={[styles.checkoutDetailTableCell, styles.checkoutDetailTableCellDivider]}>
+                  <Text style={styles.checkoutDetailTableLabel}>Total Checkouts</Text>
+                  <Text style={styles.checkoutDetailTableValue}>{summary.totalCheckouts}</Text>
+                </View>
+                <View style={styles.checkoutDetailTableCell}>
+                  <Text style={styles.checkoutDetailTableLabel}>Total Amount</Text>
+                  <Text style={styles.checkoutDetailTableValue}>${Number(summary.totalCartValue || 0).toFixed(2)}</Text>
+                </View>
+              </View>
+              <View style={styles.checkoutDetailTableRow}>
+                <View style={styles.checkoutDetailTableCellFull}>
+                  <Text style={styles.checkoutDetailTableLabel}>Items Sold</Text>
+                  <Text style={styles.checkoutDetailTableValue}>{summary.totalItemsSold}</Text>
+                </View>
+              </View>
             </View>
           </View>
         </View>

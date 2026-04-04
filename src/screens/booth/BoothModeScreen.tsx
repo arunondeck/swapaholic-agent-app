@@ -28,11 +28,10 @@ export const BoothModeScreen = ({ push, pop }) => {
           </Text>
         </View>
       ) : null} */}
-
+      <Card title="Checkout" subtitle="Process new sale" onPress={() => push('boothCheckout')} />
       <Card title="View All Booths" subtitle="Browse and manage booth approvals" onPress={() => push('booths')} />
       <Card title="Search Booth" subtitle="Find specific booth by name or seller" onPress={() => push('booths', { focusSearch: true })} />
       <Card title="Completed Sales" subtitle="Review past transactions" onPress={() => push('boothAllCheckouts')} />
-      <Card title="Checkout" subtitle="Process new sale" onPress={() => push('boothCheckout')} />
       <View style={{ opacity: 0.55 }}>
         <Card title="Generate Report" subtitle="Coming soon" />
       </View>

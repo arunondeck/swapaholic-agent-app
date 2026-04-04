@@ -381,6 +381,7 @@ export const styles = StyleSheet.create({
   cardSubtitle: { fontSize: 13, color: '#4b5563', lineHeight: 18 },
   helperText: { fontSize: 12, color: '#64748b', lineHeight: 18 },
   listItem: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e5e7eb', padding: 14, gap: 6, marginBottom: 10 },
+  boothListItem: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e5e7eb', padding: 14, gap: 6, marginBottom: 2 },
   pressableListItem: {
     backgroundColor: '#fff',
     borderRadius: 14,
@@ -1170,9 +1171,6 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   checkoutSummaryCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(72, 141, 61, 0.22)',
     overflow: 'hidden',
     backgroundColor: '#fff',
   },
@@ -1188,8 +1186,67 @@ export const styles = StyleSheet.create({
   },
   checkoutSummaryBody: {
     backgroundColor: 'rgba(72, 141, 61, 0.12)',
-    padding: 12,
     gap: 10,
+  },
+  checkoutDetailSummaryFullBleed: {
+    marginHorizontal: -16,
+    marginTop: -16,
+  },
+  checkoutFilterFullBleed: {
+    marginHorizontal: -16,
+    marginTop: -16,
+  },
+  checkoutSummaryFullBleed: {
+    marginHorizontal: -16,
+    marginTop: -16,
+  },
+  checkoutFilterDateRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  checkoutFilterDateInput: {
+    flex: 1,
+  },
+  checkoutDetailTable: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(72, 141, 61, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+  },
+  checkoutDetailTableRow: {
+    flexDirection: 'row',
+  },
+  checkoutDetailTableRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(72, 141, 61, 0.2)',
+  },
+  checkoutDetailTableCellFull: {
+    width: '100%',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  checkoutDetailTableCell: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  checkoutDetailTableCellDivider: {
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(72, 141, 61, 0.2)',
+  },
+  checkoutDetailTableLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    color: '#255322',
+  },
+  checkoutDetailTableValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1d3b19',
   },
   checkoutList: {
     borderRadius: 14,
@@ -1208,4 +1265,76 @@ export const styles = StyleSheet.create({
   checkoutListItemLast: {
     borderBottomWidth: 0,
   },
-}) as Record<string, any>;
+  boothProductCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  boothProductRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  boothProductImage: {
+    width: 92,
+    aspectRatio: SWAP_PRODUCT_IMAGE_ASPECT_RATIO,
+    backgroundColor: '#e5e7eb',
+  },
+  boothProductDetails: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+    justifyContent: 'center',
+  },
+  boothProductFriendlyId: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+    textTransform: 'uppercase',
+  },
+  boothProductName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    flex: 1,
+  },
+  boothProductMeta: {
+    fontSize: 12,
+    color: '#475569',
+  },
+  boothProductBoothName: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  boothProductPriceColumn: {
+    minWidth: 92,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderLeftWidth: 1,
+    borderLeftColor: '#e5e7eb',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  boothProductPrice: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  boothProductActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  boothProductActionWarnButton: {
+    borderColor: '#f59e0b',
+  },
+  boothProductActionWarnText: {
+    color: '#d97706',
+  },
+  }) as Record<string, any>;

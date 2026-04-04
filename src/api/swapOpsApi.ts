@@ -3985,9 +3985,9 @@ export const createBoothCheckout = async (checkoutData) => {
   }
 
   const checkout = await createLiveBoothCheckout(checkoutData);
-  for (const item of checkoutData.items || []) {
-    await markLiveProductSale(item.booth_product, item.quantity || 1);
-  }
+  // for (const item of checkoutData.items || []) {
+  //   await markLiveProductSale(item.booth_product, item.quantity || 1);
+  // }
   return checkout;
 };
 

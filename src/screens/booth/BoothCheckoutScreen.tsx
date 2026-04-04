@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useCameraPermissions } from 'expo-camera';
 import { createBoothCheckout, getBoothPaymentMethods, getBoothProductById } from '../../api/swapOpsApi';
+import { BoothProductComponent } from '../../components/BoothProductComponent';
 import { CameraScanner } from '../../components/CameraScanner';
 import { ScreenShell } from '../../components/ScreenShell';
 import { getItemIdFromScan } from '../../services/cameraScannerService';
@@ -215,20 +216,7 @@ export const BoothCheckoutScreen = ({ pop, push }) => {
             ) : (
               <>
                 {cart.map((item) => (
-                  <View key={item.id} style={styles.listItem}>
-                    <View style={styles.row}>
-                      <Text style={styles.cardTitle}>{item.name}</Text>
-                      <Text style={styles.rowValue}>x{item.quantity}</Text>
-                    </View>
-                    <Text style={styles.itemMeta}>{item.code}</Text>
-                    <View style={styles.row}>
-                      <Text style={styles.itemMeta}>{item.brand}</Text>
-                      <Text style={styles.rowValue}>{item.price}</Text>
-                    </View>
-                    <TouchableOpacity style={styles.secondaryButton} onPress={() => removeProduct(item.id)}>
-                      <Text style={styles.secondaryButtonText}>Remove</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <BoothProductComponent key={item.id} item={item} actionLabel="Remove" onAction={() => removeProduct(item.id)} />
                 ))}
                 <View style={styles.row}>
                   <Text style={styles.summarySubheading}>Subtotal</Text>

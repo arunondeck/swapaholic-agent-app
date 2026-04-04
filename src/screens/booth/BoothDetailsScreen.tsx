@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getBoothProductsByFilter, updateBoothProduct } from '../../api/swapOpsApi';
+import { BoothProductComponent } from '../../components/BoothProductComponent';
 import { ScreenShell } from '../../components/ScreenShell';
 import { useLoader } from '../../utils/LoaderContextShared';
 import { generateBoothProductLabel, isBoothProductPrinted } from '../../services/boothPrintService';
@@ -108,54 +109,50 @@ export const BoothDetailsScreen = ({ pop, push, boothId }) => {
 
       {products.length > 0
         ? products.map((item) => (
-            <View key={item.id} style={styles.itemRow}>
-              <View style={styles.itemImage} />
-              <View style={styles.itemDetails}>
-                <Text style={styles.cardTitle}>{item.name}</Text>
-                <Text style={[styles.rowValue, { color: '#059669' }]}>{item.price}</Text>
-                <Text style={styles.itemMeta}>Code: {item.code}</Text>
-                <View style={styles.row}>
-                  <Text style={styles.itemMeta}>Size: {item.size}</Text>
-                  <Text style={styles.itemMeta}>
-                    Stock: {item.stock_quantity}/{item.original_stock}
-                  </Text>
-                </View>
-                <Text style={styles.itemMeta}>Brand: {item.brand}</Text>
-                <View style={styles.actionRow}>
-                  {status === 'pending' ? (
-                    <>
-                      <TouchableOpacity
-                        style={styles.secondaryButton}
-                        onPress={() => refreshProduct(item.id, { manual_review_passed: true, rejected: false }, 'Product approved')}
-                      >
-                        <Text style={styles.secondaryButtonText}>Approve</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.secondaryButton, { borderColor: '#ef4444' }]}
-                        onPress={() => refreshProduct(item.id, { manual_review_passed: false, rejected: true }, 'Product rejected')}
-                      >
-                        <Text style={[styles.secondaryButtonText, { color: '#dc2626' }]}>Reject</Text>
-                      </TouchableOpacity>
-                    </>
-                  ) : null}
-                  {status === 'approved' ? (
-                    <>
-                      <TouchableOpacity style={styles.secondaryButton} onPress={() => printLabel(item)}>
-                        <Text style={styles.secondaryButtonText}>
-                          {isBoothProductPrinted(item.seller_booth?.id || boothId || '0', item.id) ? 'Reprint' : 'Print'}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.secondaryButton, { borderColor: '#f59e0b' }]}
-                        onPress={() => refreshProduct(item.id, { returned_to_seller: true }, 'Product returned to seller')}
-                      >
-                        <Text style={[styles.secondaryButtonText, { color: '#d97706' }]}>Return</Text>
-                      </TouchableOpacity>
-                    </>
-                  ) : null}
-                </View>
-              </View>
-            </View>
+            <BoothProductComponent
+              key={item.id}
+              item={item}
+              showBoothName={false}
+              detailLine={`Stock: ${
+                Number(item.stock_quantity || 0) <= 0
+                  ? `Sold Out (${item.original_stock || 0})`
+                  : `${item.stock_quantity || 0}/${item.original_stock || 0}`
+              } | Size: ${item.size || item.size_on_label || 'NA'}`}
+              actions={[
+                ...(status === 'pending'
+                  ? [
+                      {
+                        key: `approve-${item.id}`,
+                        label: 'Approve',
+                        variant: 'approve',
+                        onPress: () => refreshProduct(item.id, { manual_review_passed: true, rejected: false }, 'Product approved'),
+                      },
+                      {
+                        key: `reject-${item.id}`,
+                        label: 'Reject',
+                        variant: 'reject',
+                        onPress: () => refreshProduct(item.id, { manual_review_passed: false, rejected: true }, 'Product rejected'),
+                      },
+                    ]
+                  : []),
+                ...(status === 'approved'
+                  ? [
+                      {
+                        key: `print-${item.id}`,
+                        label: isBoothProductPrinted(item.seller_booth?.id || boothId || '0', item.id) ? 'Reprint' : 'Print',
+                        variant: 'neutral',
+                        onPress: () => printLabel(item),
+                      },
+                      {
+                        key: `return-${item.id}`,
+                        label: 'Return',
+                        variant: 'warn',
+                        onPress: () => refreshProduct(item.id, { returned_to_seller: true }, 'Product returned to seller'),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
           ))
         : null}
 

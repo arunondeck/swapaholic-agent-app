@@ -270,42 +270,79 @@ const getGraphqlOperationName = (query = '') => {
   return match?.[1] || 'anonymous';
 };
 
+const getGraphqlOperationType = (query = '') => {
+  const normalized = String(query || '').replace(/\s+/g, ' ').trim();
+  const match = normalized.match(/^(query|mutation)\b/i);
+  return match?.[1]?.toLowerCase() || 'unknown';
+};
+
+const stringifyLogPayload = (value) => {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch (error) {
+    return JSON.stringify({
+      serializationError: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
 const logBoothRequest = ({ callerName = 'unknown', payload, headers }) => {
   const operationName = getGraphqlOperationName(payload?.query);
-  console.log('[boothApi] request', {
-    functionName: callerName,
-    api: operationName,
-    method: 'POST',
-    url: BOOTH_GRAPHQL_URL,
-    params: payload?.variables || {},
-    hasAuth: Boolean(headers?.Authorization),
-  });
+  const operationType = getGraphqlOperationType(payload?.query);
+  console.log(
+    '[boothApi] request',
+    stringifyLogPayload({
+      functionName: callerName,
+      operationType,
+      operationName,
+      method: 'POST',
+      url: BOOTH_GRAPHQL_URL,
+      params: payload?.variables || {},
+      hasAuth: Boolean(headers?.Authorization),
+      headers: {
+        Authorization: headers?.Authorization ? 'Bearer ***' : '',
+        'Content-Type': headers?.['Content-Type'] || '',
+      },
+    })
+  );
 };
 
 const logBoothResponse = ({ callerName = 'unknown', payload, response, error, durationMs = 0, status = null }) => {
   const operationName = getGraphqlOperationName(payload?.query);
+  const operationType = getGraphqlOperationType(payload?.query);
   if (error) {
-    console.error('[boothApi] response', {
+    console.error(
+      '[boothApi] response',
+      stringifyLogPayload({
+        functionName: callerName,
+        operationType,
+        operationName,
+        method: 'POST',
+        url: BOOTH_GRAPHQL_URL,
+        status,
+        durationMs,
+        params: payload?.variables || {},
+        error: error instanceof Error ? error.message : String(error),
+      })
+    );
+    return;
+  }
+
+  console.log(
+    '[boothApi] response',
+    stringifyLogPayload({
       functionName: callerName,
-      api: operationName,
+      operationType,
+      operationName,
       method: 'POST',
       url: BOOTH_GRAPHQL_URL,
       status,
       durationMs,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return;
-  }
-
-  console.log('[boothApi] response', {
-    functionName: callerName,
-    api: operationName,
-    method: 'POST',
-    url: BOOTH_GRAPHQL_URL,
-    status,
-    durationMs,
-    hasData: Boolean(response),
-  });
+      params: payload?.variables || {},
+      hasData: Boolean(response),
+      response: response || null,
+    })
+  );
 };
 
 const isBoothAuthErrorMessage = (message = '') => {

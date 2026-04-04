@@ -160,19 +160,16 @@ export const BoothsScreen = ({ pop, push, focusSearch }) => {
 
       {booths.length > 0
         ? booths.map((booth) => (
-            <TouchableOpacity key={booth.id} style={styles.listItem} onPress={() => push('boothDetails', { boothId: booth.id })}>
+            <TouchableOpacity key={booth.id} style={styles.boothListItem} onPress={() => push('boothDetails', { boothId: booth.id })}>
               <Text style={styles.cardTitle}>{booth.name}</Text>
               <Text style={styles.cardSubtitle}>
                 {formatDate(booth.booth_start_date)} - {formatDate(booth.booth_end_date)}
               </Text>
-              <Text style={styles.helperText}>{booth.seller}</Text>
               <View style={styles.row}>
-                <Text style={styles.rowLabel}>Status: {booth.status}</Text>
-                <Text style={styles.rowValue}>{booth.items} items</Text>
-              </View>
-              <View style={styles.row}>
-                <Text style={styles.rowLabel}>Slot: {booth.booth_slot || 'NA'}</Text>
-                <Text style={styles.rowValue}>{booth.cycle}</Text>
+                <Text style={styles.helperText}>{booth.seller}</Text>
+                <View style={styles.subscriptionBadge}>
+                  <Text style={styles.subscriptionBadgeText}>{booth.items} items</Text>
+                </View>
               </View>
             </TouchableOpacity>
           ))
