@@ -226,7 +226,7 @@ export default function App() {
               <Text style={styles.splashAppName}>{APP_NAME}</Text>
               <Text style={styles.splashVersion}>Version {APP_VERSION}</Text>
               <View style={styles.splashLoadingText}>
-                <GlobalLoaderCard border={false} message="Firing Superpowers!!" />
+                <GlobalLoaderCard border={false} message="Activating Superpowers!!" />
               </View>
             </View>
           </View>
